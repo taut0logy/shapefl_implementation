@@ -7,7 +7,7 @@ Functions for tracking accuracy, communication cost, and other metrics.
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 import json
 import os
 from datetime import datetime

@@ -19,7 +19,7 @@ Reference: Paper Section IV-C, Algorithm 1 (page 2606)
 """
 
 import numpy as np
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Dict, List, Set, Tuple
 from dataclasses import dataclass
 
 

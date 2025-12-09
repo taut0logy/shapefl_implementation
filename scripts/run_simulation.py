@@ -8,15 +8,13 @@ Run all components (cloud, edges, nodes) on a single machine for testing.
 import os
 import sys
 import time
-import signal
 import argparse
-from threading import Thread
 from multiprocessing import Process
 
 # Add implementation directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import TRAINING_CONFIG, PATH_CONFIG
+from config import PATH_CONFIG
 from data.data_loader import (
     load_fmnist_data,
     create_non_iid_partitions,

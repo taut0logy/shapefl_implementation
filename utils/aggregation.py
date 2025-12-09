@@ -6,7 +6,7 @@ Functions for aggregating model updates using FedAvg and weighted averaging.
 
 import torch
 import torch.nn as nn
-from typing import List, Dict, Tuple
+from typing import List, Dict
 import copy
 
 

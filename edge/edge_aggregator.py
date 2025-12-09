@@ -15,32 +15,26 @@ Based on the HFL framework described in the ShapeFL paper.
 
 import os
 import sys
-import json
-import time
-import copy
 import torch
-import torch.nn as nn
-import numpy as np
 import requests
 from flask import Flask, request, jsonify
 from threading import Lock, Event, Thread
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, Any
 from datetime import datetime
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import TRAINING_CONFIG, NETWORK_CONFIG, PATH_CONFIG
-from models.lenet5 import LeNet5, get_model
+from config import TRAINING_CONFIG
+from models.lenet5 import get_model
 from utils.communication import (
     model_to_bytes,
     bytes_to_model,
     compress_model,
     decompress_model,
-    state_dict_to_json,
     json_to_state_dict,
 )
-from utils.aggregation import federated_averaging, weighted_averaging
+from utils.aggregation import federated_averaging
 
 
 class EdgeAggregator:
@@ -311,7 +305,7 @@ class EdgeAggregator:
                 timeout=120,
             )
             if response.status_code == 200:
-                print(f"Submitted aggregated model to cloud")
+                print("Submitted aggregated model to cloud")
                 return True
             else:
                 print(f"Failed to submit to cloud: {response.text}")

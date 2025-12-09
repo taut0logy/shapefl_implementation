@@ -17,7 +17,6 @@ Reference: Paper Section IV-C, Algorithm 2 (page 2606)
 import numpy as np
 from typing import Dict, List, Set, Tuple, Optional
 from dataclasses import dataclass
-import copy
 
 from .goa import GreedyNodeAssociation, NodeAssociationResult
 

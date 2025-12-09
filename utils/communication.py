@@ -5,7 +5,6 @@ HTTP-based communication helpers for exchanging models and data
 between cloud server, edge aggregators, and computing nodes.
 """
 
-import json
 import gzip
 import base64
 import requests
@@ -13,7 +12,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from typing import Dict, Any, Optional, Tuple
-from flask import request
 import io
 
 
@@ -204,7 +202,7 @@ def send_json(url: str, data: Dict[str, Any], timeout: int = 300) -> requests.Re
     return response
 
 
-def receive_json(request_obj: request) -> Dict[str, Any]:
+def receive_json(request_obj) -> Dict[str, Any]:
     """
     Receive JSON data from a Flask request.
 

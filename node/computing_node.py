@@ -15,32 +15,26 @@ Based on Algorithm 3 (LocalUpdate function) from the ShapeFL paper.
 
 import os
 import sys
-import json
-import time
 import copy
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
 import requests
 from flask import Flask, request, jsonify
 from threading import Lock, Event, Thread
-from typing import Dict, List, Any, Optional
-from datetime import datetime
-from torch.utils.data import DataLoader, Subset
+from typing import List
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import TRAINING_CONFIG, NETWORK_CONFIG, PATH_CONFIG
-from models.lenet5 import LeNet5, get_model
+from config import TRAINING_CONFIG
+from models.lenet5 import get_model
 from data.data_loader import load_fmnist_data, load_partitions, get_node_dataloader
 from utils.communication import (
     model_to_bytes,
     bytes_to_model,
     compress_model,
     decompress_model,
-    state_dict_to_json,
     json_to_state_dict,
 )
 from utils.aggregation import get_linear_layer_update
@@ -236,7 +230,7 @@ class ComputingNode:
                 model_bytes = decompress_model(data["model"])
                 self.model = bytes_to_model(model_bytes, self.model)
                 self.current_round = data.get("round", 0)
-                print(f"Fetched global model from cloud")
+                print("Fetched global model from cloud")
                 return True
             else:
                 print(f"Failed to fetch model: {response.text}")
@@ -383,7 +377,7 @@ class ComputingNode:
                 timeout=60,
             )
             if response.status_code == 200:
-                print(f"Submitted pre-training results to cloud")
+                print("Submitted pre-training results to cloud")
                 return True
             else:
                 print(f"Failed to submit pre-training: {response.text}")

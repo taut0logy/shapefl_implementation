@@ -15,7 +15,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset
 from torchvision import datasets, transforms
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple
 import pandas as pd
 
 

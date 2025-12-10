@@ -13,7 +13,7 @@ import argparse
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import TRAINING_CONFIG, PATH_CONFIG
+from config import PATH_CONFIG
 from data.data_loader import (
     load_fmnist_data,
     create_non_iid_partitions,
@@ -42,19 +42,13 @@ def main():
         help="Number of classes per node (k in paper)",
     )
     parser.add_argument(
-        "--output-dir",
-        type=str,
-        default=None,
-        help="Output directory for partition files",
-    )
-    parser.add_argument(
         "--seed", type=int, default=42, help="Random seed for reproducibility"
     )
 
     args = parser.parse_args()
 
     # Set output directory
-    output_dir = args.output_dir or PATH_CONFIG.partitions_dir
+    output_dir = PATH_CONFIG.partitions_dir
     os.makedirs(output_dir, exist_ok=True)
 
     print("=" * 60)

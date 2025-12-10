@@ -47,7 +47,7 @@ class EdgeAggregator:
         edge_id: str,
         host: str = "0.0.0.0",
         port: int = 5001,
-        cloud_host: str = "192.168.1.100",
+        cloud_host: str = "192.168.0.100",
         cloud_port: int = 5000,
     ):
         """
@@ -409,7 +409,7 @@ def main():
     parser.add_argument(
         "--cloud-host",
         type=str,
-        default="192.168.1.100",
+        default="192.168.0.100",
         help="Cloud server host address",
     )
     parser.add_argument(

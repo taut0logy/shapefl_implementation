@@ -96,7 +96,7 @@ based on communication cost and data distribution similarity.
 ### Network
 
 -   Local router or Ethernet switch
--   All devices on the same LAN subnet (e.g., 192.168.1.0/24)
+-   All devices on the same LAN subnet (e.g., 192.168.0.0/24)
 
 ## Installation
 
@@ -161,23 +161,23 @@ Edit `src/config.py` to match your network setup:
 @dataclass
 class NetworkConfig:
     # Cloud server IP address
-    cloud_host: str = "192.168.1.100"  # Your laptop's IP
+    cloud_host: str = "192.168.0.100"  # Your laptop's IP
     cloud_port: int = 5000
 
     # Edge aggregators
     edge_aggregators: List[Dict] = field(default_factory=lambda: [
-        {"id": "edge_0", "host": "192.168.1.101", "port": 5001},
-        {"id": "edge_1", "host": "192.168.1.102", "port": 5001},
-        {"id": "edge_2", "host": "192.168.1.103", "port": 5001},
+        {"id": "edge_0", "host": "192.168.0.101", "port": 5001},
+        {"id": "edge_1", "host": "192.168.0.102", "port": 5001},
+        {"id": "edge_2", "host": "192.168.0.103", "port": 5001},
     ])
 
     # Computing nodes
     computing_nodes: List[Dict] = field(default_factory=lambda: [
-        {"id": "node_0", "host": "192.168.1.111", "port": 5002},
-        {"id": "node_1", "host": "192.168.1.112", "port": 5002},
-        {"id": "node_2", "host": "192.168.1.113", "port": 5002},
-        {"id": "node_3", "host": "192.168.1.114", "port": 5002},
-        {"id": "node_4", "host": "192.168.1.115", "port": 5002},
+        {"id": "node_0", "host": "192.168.0.111", "port": 5002},
+        {"id": "node_1", "host": "192.168.0.112", "port": 5002},
+        {"id": "node_2", "host": "192.168.0.113", "port": 5002},
+        {"id": "node_3", "host": "192.168.0.114", "port": 5002},
+        {"id": "node_4", "host": "192.168.0.115", "port": 5002},
     ])
 ```
 
@@ -253,7 +253,7 @@ This creates `partitions/partitions.json` with non-IID data assignments.
 
 ```bash
 # Deploy code to all Pis
-PIES="192.168.1.101 192.168.1.102 192.168.1.103 192.168.1.111 192.168.1.112 192.168.1.113 192.168.1.114 192.168.1.115"
+PIES="192.168.0.101 192.168.0.102 192.168.0.103 192.168.0.111 192.168.0.112 192.168.0.113 192.168.0.114 192.168.0.115"
 
 for PI in $PIES; do
     echo "Deploying to $PI..."
@@ -262,7 +262,7 @@ for PI in $PIES; do
 done
 
 # Copy dataset and partitions to computing nodes only
-for NODE in 192.168.1.{111..115}; do
+for NODE in 192.168.0.{111..115}; do
     scp ../dataset/*.csv pi@$NODE:/home/pi/shapefl/dataset/
     scp partitions/partitions.json pi@$NODE:/home/pi/shapefl/partitions/
 done
@@ -282,7 +282,7 @@ python -m cloud.cloud_server --host 0.0.0.0 --port 5000
 
 ```bash
 # SSH into edge aggregator Pi
-ssh pi@192.168.1.101
+ssh pi@192.168.0.101
 
 cd /home/pi/shapefl
 source .venv/bin/activate
@@ -290,11 +290,11 @@ python -m edge.edge_aggregator \
     --edge-id edge_0 \
     --host 0.0.0.0 \
     --port 5001 \
-    --cloud-host 192.168.1.100 \
+    --cloud-host 192.168.0.100 \
     --cloud-port 5000
 ```
 
-Repeat for edge1 (`edge_1` on 192.168.1.102) and edge2 (`edge_2` on 192.168.1.103).
+Repeat for edge1 (`edge_1` on 192.168.0.102) and edge2 (`edge_2` on 192.168.0.103).
 
 **3. Computing Nodes (each Pi):**
 
@@ -302,7 +302,7 @@ Repeat for edge1 (`edge_1` on 192.168.1.102) and edge2 (`edge_2` on 192.168.1.10
 
 ```bash
 # SSH into computing node Pi
-ssh pi@192.168.1.111
+ssh pi@192.168.0.111
 
 cd /home/pi/shapefl
 source .venv/bin/activate
@@ -310,7 +310,7 @@ python -m node.computing_node \
     --node-id node_0 \
     --host 0.0.0.0 \
     --port 5002 \
-    --cloud-host 192.168.1.100 \
+    --cloud-host 192.168.0.100 \
     --cloud-port 5000 \
     --partitions-file partitions/partitions.json
 ```
@@ -343,13 +343,13 @@ The orchestrator automates:
 
 ```bash
 # Check status
-curl http://192.168.1.100:5000/status
+curl http://192.168.0.100:5000/status
 
 # View latest metrics
-curl http://192.168.1.100:5000/metrics/latest
+curl http://192.168.0.100:5000/metrics/latest
 
 # View all metrics history
-curl http://192.168.1.100:5000/metrics/all
+curl http://192.168.0.100:5000/metrics/all
 ```
 
 ## Project Structure
@@ -523,7 +523,7 @@ plt.savefig('accuracy_vs_comm.png', dpi=300)
 sudo ufw allow 5000:5300/tcp
 
 # Verify device is reachable
-ping 192.168.1.101
+ping 192.168.0.101
 ```
 
 **2. Out of Memory on Raspberry Pi**

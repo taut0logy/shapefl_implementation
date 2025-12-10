@@ -50,7 +50,7 @@ class ComputingNode:
         node_id: str,
         host: str = "0.0.0.0",
         port: int = 5002,
-        cloud_host: str = "192.168.1.100",
+        cloud_host: str = "192.168.0.100",
         cloud_port: int = 5000,
         data_indices: List[int] = None,
         partitions_file: str = None,
@@ -184,15 +184,17 @@ class ComputingNode:
             """Trigger pre-training phase (Algorithm 3, offline phase)."""
             data = request.get_json()
             epochs = data.get("epochs", TRAINING_CONFIG.kappa_p)
-            
+
             # Start pre-training in background thread
             Thread(target=self.pretrain, args=(epochs,)).start()
-            
-            return jsonify({
-                "status": "pretrain_started",
-                "epochs": epochs,
-                "node_id": self.node_id
-            })
+
+            return jsonify(
+                {
+                    "status": "pretrain_started",
+                    "epochs": epochs,
+                    "node_id": self.node_id,
+                }
+            )
 
         @self.app.route("/edge/assign", methods=["POST"])
         def assign_edge():
@@ -200,14 +202,16 @@ class ComputingNode:
             data = request.get_json()
             edge_host = data["edge_host"]
             edge_port = data["edge_port"]
-            
+
             success = self.register_with_edge(edge_host, edge_port)
-            
-            return jsonify({
-                "status": "assigned" if success else "failed",
-                "edge_id": self.edge_id,
-                "node_id": self.node_id
-            })
+
+            return jsonify(
+                {
+                    "status": "assigned" if success else "failed",
+                    "edge_id": self.edge_id,
+                    "node_id": self.node_id,
+                }
+            )
 
     def register_with_cloud(self):
         """Register this node with the cloud server."""
@@ -336,7 +340,7 @@ class ComputingNode:
                 num_batches += 1
 
             avg_loss = epoch_loss / len(self.data_loader)
-            print(f"  Epoch {epoch+1}/{epochs}: Loss = {avg_loss:.4f}")
+            print(f"  Epoch {epoch + 1}/{epochs}: Loss = {avg_loss:.4f}")
             total_loss += epoch_loss
 
         avg_total_loss = total_loss / num_batches if num_batches > 0 else 0
@@ -384,7 +388,7 @@ class ComputingNode:
                 epoch_loss += loss.item()
 
             if (epoch + 1) % 10 == 0:
-                print(f"  Pre-train epoch {epoch+1}/{epochs}")
+                print(f"  Pre-train epoch {epoch + 1}/{epochs}")
 
         print("Pre-training complete")
 
@@ -519,7 +523,7 @@ def main():
     parser.add_argument(
         "--cloud-host",
         type=str,
-        default="192.168.1.100",
+        default="192.168.0.100",
         help="Cloud server host address",
     )
     parser.add_argument(

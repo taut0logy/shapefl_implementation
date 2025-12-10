@@ -53,26 +53,26 @@ class NetworkConfig:
     """Network configuration for distributed deployment."""
 
     # Cloud server (your laptop/desktop with GPU)
-    cloud_host: str = "192.168.1.100"
+    cloud_host: str = "192.168.0.100"
     cloud_port: int = 5000
 
     # Edge aggregators (Raspberry Pis acting as aggregators)
     edge_aggregators: List[Dict] = field(
         default_factory=lambda: [
-            {"id": "edge_0", "host": "192.168.1.101", "port": 5001},
-            {"id": "edge_1", "host": "192.168.1.102", "port": 5001},
-            {"id": "edge_2", "host": "192.168.1.103", "port": 5001},
+            {"id": "edge_0", "host": "192.168.0.101", "port": 5001},
+            {"id": "edge_1", "host": "192.168.0.102", "port": 5001},
+            {"id": "edge_2", "host": "192.168.0.103", "port": 5001},
         ]
     )
 
     # Computing nodes (Raspberry Pis as worker nodes)
     computing_nodes: List[Dict] = field(
         default_factory=lambda: [
-            {"id": "node_0", "host": "192.168.1.111", "port": 5002},
-            {"id": "node_1", "host": "192.168.1.112", "port": 5002},
-            {"id": "node_2", "host": "192.168.1.113", "port": 5002},
-            {"id": "node_3", "host": "192.168.1.114", "port": 5002},
-            {"id": "node_4", "host": "192.168.1.115", "port": 5002},
+            {"id": "node_0", "host": "192.168.0.111", "port": 5002},
+            {"id": "node_1", "host": "192.168.0.112", "port": 5002},
+            {"id": "node_2", "host": "192.168.0.113", "port": 5002},
+            {"id": "node_3", "host": "192.168.0.114", "port": 5002},
+            {"id": "node_4", "host": "192.168.0.115", "port": 5002},
         ]
     )
 

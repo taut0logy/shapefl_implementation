@@ -328,13 +328,12 @@ class EdgeAggregator:
         print(f"\nStarting training loop for edge {self.edge_id}")
 
         kappa_e = TRAINING_CONFIG.kappa_e
-        kappa_c = TRAINING_CONFIG.kappa_c
 
         for round_num in range(1, TRAINING_CONFIG.kappa + 1):
             self.current_round = round_num
-            print(f"\n{'='*50}")
+            print(f"\n{'=' * 50}")
             print(f"Round {round_num}")
-            print(f"{'='*50}")
+            print(f"{'=' * 50}")
 
             # Fetch latest global model from cloud
             self.fetch_global_model()
@@ -360,10 +359,11 @@ class EdgeAggregator:
                 # Aggregate node updates
                 self.aggregate_node_updates()
 
-            # Submit to cloud after kappa_e edge epochs
-            if round_num % kappa_c == 0:
-                print(f"\nCloud aggregation round {round_num // kappa_c}")
-                self.submit_to_cloud()
+            # Submit to cloud after completing kappa_e edge epochs
+            # Per Algorithm 3: Edge submits after each round of local aggregations
+            # The cloud decides when to perform global aggregation based on kappa_c
+            print(f"\nSubmitting to cloud after round {round_num}")
+            self.submit_to_cloud()
 
         print(f"\nTraining complete for edge {self.edge_id}")
 

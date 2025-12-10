@@ -16,39 +16,28 @@ Based on Algorithm 3 from the ShapeFL paper.
 
 import os
 import sys
-import json
-import time
-import copy
 import torch
-import torch.nn as nn
 import numpy as np
 from flask import Flask, request, jsonify
 from threading import Lock, Event
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, Any, Optional, Set
 from datetime import datetime
 from torch.utils.data import DataLoader
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import TRAINING_CONFIG, NETWORK_CONFIG, PATH_CONFIG
-from models.lenet5 import LeNet5, get_model
-from data.data_loader import (
-    load_fmnist_data,
-    create_non_iid_partitions,
-    save_partitions,
-)
-from algorithms.goa import run_goa
+from config import TRAINING_CONFIG, PATH_CONFIG
+from models.lenet5 import get_model
+from data.data_loader import load_fmnist_data
 from algorithms.los import run_los
 from utils.communication import (
     model_to_bytes,
     bytes_to_model,
     compress_model,
-    decompress_model,
-    state_dict_to_json,
-    json_to_state_dict,
+    decompress_model
 )
-from utils.aggregation import federated_averaging, weighted_averaging
+from utils.aggregation import federated_averaging
 from utils.similarity import compute_similarity_matrix
 from utils.metrics import MetricsTracker, compute_accuracy
 
@@ -96,9 +85,9 @@ class CloudServer:
         self.registered_edges: Dict[str, Dict[str, Any]] = {}
 
         # Pre-training data
-        self.pretrain_updates: Dict[str, torch.Tensor] = (
-            {}
-        )  # node_id -> linear layer update
+        self.pretrain_updates: Dict[
+            str, torch.Tensor
+        ] = {}  # node_id -> linear layer update
         self.data_sizes: Dict[str, int] = {}  # node_id -> data size
 
         # Algorithm results
@@ -261,6 +250,41 @@ class CloudServer:
                 }
             )
 
+        @self.app.route("/algorithms/run", methods=["POST"])
+        def run_algorithms_endpoint():
+            """Execute LoS + GoA algorithms for edge selection and node association."""
+            self.run_algorithms()
+            return jsonify(
+                {
+                    "status": "completed",
+                    "selected_edges": list(self.selected_edges),
+                    "node_associations": self.node_associations,
+                }
+            )
+
+        @self.app.route("/training/start", methods=["POST"])
+        def start_training():
+            """Start the hierarchical training loop."""
+            data = request.get_json()
+            rounds = data.get("rounds", TRAINING_CONFIG.kappa)
+
+            # Start training in background thread
+            from threading import Thread
+
+            Thread(target=self.run_training_loop, args=(rounds,)).start()
+
+            return jsonify({"status": "training_started", "rounds": rounds})
+
+        @self.app.route("/metrics/latest", methods=["GET"])
+        def get_latest_metrics():
+            """Get the most recent training metrics."""
+            return jsonify(self.metrics.get_latest())
+
+        @self.app.route("/metrics/all", methods=["GET"])
+        def get_all_metrics():
+            """Get all training metrics history."""
+            return jsonify(self.metrics.get_all())
+
     def compute_communication_costs(self) -> tuple:
         """
         Compute communication costs for the LAN setup.
@@ -403,6 +427,70 @@ class CloudServer:
         """
         return compute_accuracy(self.global_model, self.test_loader, self.device)
 
+    def run_training_loop(self, num_rounds: int):
+        """
+        Run the hierarchical federated learning training loop.
+
+        This implements Algorithm 3 from the ShapeFL paper:
+        1. Wait for edge updates after kappa_c edge epochs
+        2. Perform cloud aggregation
+        3. Evaluate and record metrics
+        4. Repeat for specified rounds
+
+        Args:
+            num_rounds: Number of cloud aggregation rounds
+        """
+        from utils.metrics import compute_communication_cost
+
+        print("\n" + "=" * 60)
+        print(f"Starting Training: {num_rounds} rounds")
+        print("=" * 60)
+
+        for round_num in range(1, num_rounds + 1):
+            self.current_round = round_num
+            print(f"\n--- Cloud Aggregation Round {round_num}/{num_rounds} ---")
+
+            # Wait for all selected edges to submit their updates
+            print("Waiting for edge updates...")
+            self.round_complete.wait(timeout=600)  # 10 minute timeout
+
+            if len(self.edge_updates) < len(self.selected_edges):
+                print(
+                    f"Warning: Only received {len(self.edge_updates)}/"
+                    f"{len(self.selected_edges)} edge updates"
+                )
+
+            # Perform cloud aggregation
+            self.aggregate_edge_updates()
+
+            # Evaluate the global model
+            accuracy = self.evaluate()
+            print(f"Round {round_num} Accuracy: {accuracy:.4f}")
+
+            # Compute communication cost for this round
+            comm_cost = compute_communication_cost(
+                model=self.global_model,
+                num_nodes=len(self.registered_nodes),
+                num_edges=len(self.selected_edges),
+                kappa_e=TRAINING_CONFIG.kappa_e,
+                kappa_c=TRAINING_CONFIG.kappa_c,
+            )
+
+            # Record metrics
+            self.metrics.record(
+                round_num=round_num,
+                accuracy=accuracy,
+                loss=0.0,  # Loss is tracked at node level
+                communication_cost=comm_cost,
+            )
+
+        # Save final metrics
+        self.metrics.save()
+        print("\n" + "=" * 60)
+        print("Training Complete!")
+        print(f"Final Accuracy: {accuracy:.4f}")
+        print("=" * 60)
+
     def run(self):
         """
         Start the cloud server.
@@ -412,7 +500,7 @@ class CloudServer:
         print("=" * 60)
         print(f"Host: {self.host}:{self.port}")
         print(f"Device: {self.device}")
-        print(f"Waiting for nodes and edges to register...")
+        print("Waiting for nodes and edges to register...")
         print("=" * 60 + "\n")
 
         self.app.run(host=self.host, port=self.port, threaded=True)

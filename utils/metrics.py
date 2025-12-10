@@ -93,6 +93,29 @@ class MetricsTracker:
             "total_time": str(datetime.now() - self.start_time),
         }
 
+    def get_latest(self) -> Dict[str, Any]:
+        """Get the latest training metrics."""
+        if len(self.metrics["accuracy"]) == 0:
+            return {
+                "round": 0,
+                "accuracy": 0.0,
+                "loss": 0.0,
+                "communication_cost": 0,
+                "cumulative_comm_cost": 0,
+            }
+
+        return {
+            "round": self.metrics["round"][-1],
+            "accuracy": self.metrics["accuracy"][-1],
+            "loss": self.metrics["loss"][-1],
+            "communication_cost": self.metrics["communication_cost"][-1],
+            "cumulative_comm_cost": self.metrics["cumulative_comm_cost"][-1],
+        }
+
+    def get_all(self) -> Dict[str, List[Any]]:
+        """Get all training metrics history."""
+        return self.metrics
+
 
 def compute_accuracy(
     model: nn.Module, data_loader: DataLoader, device: torch.device = None

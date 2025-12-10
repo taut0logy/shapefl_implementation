@@ -2,6 +2,10 @@
 .env
 .py[cod]
 __pycache__/
+logs/
+partitions/
+checkpoints/
+metrics/
 *.md
 !README.md
 !LICENSE.md

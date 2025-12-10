@@ -179,6 +179,36 @@ class ComputingNode:
                 }
             )
 
+        @self.app.route("/pretrain/start", methods=["POST"])
+        def start_pretrain():
+            """Trigger pre-training phase (Algorithm 3, offline phase)."""
+            data = request.get_json()
+            epochs = data.get("epochs", TRAINING_CONFIG.kappa_p)
+            
+            # Start pre-training in background thread
+            Thread(target=self.pretrain, args=(epochs,)).start()
+            
+            return jsonify({
+                "status": "pretrain_started",
+                "epochs": epochs,
+                "node_id": self.node_id
+            })
+
+        @self.app.route("/edge/assign", methods=["POST"])
+        def assign_edge():
+            """Assign this node to an edge aggregator (after GoA algorithm)."""
+            data = request.get_json()
+            edge_host = data["edge_host"]
+            edge_port = data["edge_port"]
+            
+            success = self.register_with_edge(edge_host, edge_port)
+            
+            return jsonify({
+                "status": "assigned" if success else "failed",
+                "edge_id": self.edge_id,
+                "node_id": self.node_id
+            })
+
     def register_with_cloud(self):
         """Register this node with the cloud server."""
         try:

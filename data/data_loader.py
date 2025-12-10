@@ -55,7 +55,7 @@ def load_fmnist_data(
     """
     if data_dir is None:
         # Default to the dataset directory in the project
-        data_dir = os.path.join(os.path.dirname(__file__), "..", "..", "dataset")
+        data_dir = os.path.join(os.path.dirname(__file__), "..", "dataset")
 
     if use_csv and os.path.exists(os.path.join(data_dir, "fashion-mnist_train.csv")):
         print("Loading Fashion-MNIST from CSV files...")
@@ -219,7 +219,9 @@ def save_partitions(partitions: Dict[int, List[int]], filepath: str):
     # Convert keys to strings for JSON
     partitions_str = {str(k): v for k, v in partitions.items()}
 
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    directory = os.path.dirname(filepath)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     with open(filepath, "w") as f:
         json.dump(partitions_str, f)
     print(f"Partitions saved to {filepath}")
@@ -285,10 +287,13 @@ if __name__ == "__main__":
         )
 
     # Save and load test
-    save_partitions(partitions, "test_partitions.json")
-    loaded = load_partitions("test_partitions.json")
+    save_partitions(
+        partitions,
+        os.path.join(os.path.dirname(__file__), "..", "partitions", "test_partitions.json"),
+    )
+    loaded = load_partitions(os.path.join(os.path.dirname(__file__), "..", "partitions", "test_partitions.json"))
     assert partitions == loaded, "Partition save/load mismatch!"
     print("\nPartition save/load test passed!")
 
     # Cleanup
-    os.remove("test_partitions.json")
+    os.remove(os.path.join(os.path.dirname(__file__), "..", "partitions", "test_partitions.json"))

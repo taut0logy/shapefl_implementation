@@ -1,7 +1,8 @@
 .venv
 .env
-.py[cod]
+*.py[cod]
 __pycache__/
+dataset/
 logs/
 partitions/
 checkpoints/

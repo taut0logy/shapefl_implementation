@@ -82,6 +82,7 @@ class EdgeAggregator:
         self.current_round = 0
         self.current_edge_epoch = 0
         self.node_updates: Dict[str, Dict[str, Any]] = {}
+        self.last_aggregation_data_size = 0  # Track data size from last aggregation
 
         # Synchronization
         self.lock = Lock()
@@ -110,14 +111,21 @@ class EdgeAggregator:
             data = request.get_json()
             node_id = data["node_id"]
 
+            # Use the actual IP from the request, not the host sent by the node
+            # (the node sends 0.0.0.0 which is its bind address, not reachable)
+            actual_host = request.remote_addr
+            node_port = data["port"]
+
             with self.lock:
                 self.associated_nodes[node_id] = {
-                    "host": data["host"],
-                    "port": data["port"],
+                    "host": actual_host,
+                    "port": node_port,
                     "registered_at": str(datetime.now()),
                 }
 
-            print(f"Node {node_id} registered with edge {self.edge_id}")
+            print(
+                f"Node {node_id} registered with edge {self.edge_id} at {actual_host}:{node_port}"
+            )
             return jsonify({"status": "registered", "edge_id": self.edge_id})
 
         @self.app.route("/model/current", methods=["GET"])
@@ -273,6 +281,9 @@ class EdgeAggregator:
         # Update current model
         with self.lock:
             self.current_model.load_state_dict(aggregated.state_dict())
+            self.last_aggregation_data_size = (
+                total_data_size  # Track for submit_to_cloud
+            )
             self.node_updates.clear()
             self.epoch_complete.clear()
 
@@ -286,11 +297,8 @@ class EdgeAggregator:
         model_bytes = model_to_bytes(self.current_model)
         compressed = compress_model(model_bytes)
 
-        # Calculate total data size from associated nodes
-        total_data_size = sum(
-            self.associated_nodes.get(nid, {}).get("data_size", 0)
-            for nid in self.associated_nodes
-        )
+        # Use the tracked data size from the last aggregation
+        total_data_size = self.last_aggregation_data_size
 
         try:
             response = requests.post(

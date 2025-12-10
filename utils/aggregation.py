@@ -31,7 +31,11 @@ def federated_averaging(
     else:
         # Normalize weights
         total = sum(weights)
-        weights = [w / total for w in weights]
+        if total == 0:
+            # Fall back to uniform weights if all weights are zero
+            weights = [1.0 / len(models)] * len(models)
+        else:
+            weights = [w / total for w in weights]
 
     # Create a copy of the first model
     aggregated_model = copy.deepcopy(models[0])

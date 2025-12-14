@@ -611,6 +611,8 @@ For questions or support, please open an issue on GitHub or contact:
 
 -   Email: raufun.ahsan@gmail.com
 -   GitHub: [@taut0logy](https://github.com/taut0logy)
+-   Email: sakiburrahman11.msr@gmail.com
+-   GitHub: [@SakiburRahman07](https://github.com/SakiburRahman07)
 
 ---
 

@@ -11,3 +11,5 @@ results/
 *.md
 !README.md
 !LICENSE.md
+!report.md
+!manual.md

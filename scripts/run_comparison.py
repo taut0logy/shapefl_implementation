@@ -410,10 +410,23 @@ def main():
                         default=["shapefl", "cost_first", "data_first", "random", "fedavg"],
                         choices=["shapefl", "cost_first", "data_first", "random", "fedavg"],
                         help="Which strategies to run")
-    parser.add_argument("--output-dir", type=str, default="results/comparison")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Output directory. Auto-generated from config + timestamp if omitted.")
     parser.add_argument("--seed", type=int, default=42)
 
     args = parser.parse_args()
+
+    # ── Auto-generate unique output directory ─────────────────────────
+    if args.output_dir is None:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        args.output_dir = (
+            f"results/comparison_{args.model}_{args.dataset}"
+            f"_n{args.num_nodes}_k{args.kappa}_{ts}"
+        )
+    _existing = os.path.join(args.output_dir, "comparison_results.json")
+    if os.path.isfile(_existing):
+        print(f"  WARNING: {_existing} already exists and will be overwritten.")
 
     # ── Auto-set from dataset ────────────────────────────────────────────
     ds_info = DATASET_INFO[args.dataset]
@@ -631,6 +644,19 @@ def main():
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2)
     print(f"\nResults saved to {out_path}")
+
+    # ── Visualization ────────────────────────────────────────────────────
+    try:
+        from utils.visualization import visualize_comparison
+        visualize_comparison(
+            all_metrics=all_metrics,
+            summary=summary,
+            config=output["config"],
+            target_accuracy=target,
+            output_dir=args.output_dir,
+        )
+    except Exception as e:
+        print(f"[Warning] Visualization failed: {e}")
 
 
 if __name__ == "__main__":

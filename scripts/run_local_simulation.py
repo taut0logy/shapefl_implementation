@@ -490,6 +490,18 @@ def run_simulation(args):
     torch.save(global_model.state_dict(), model_path)
     print(f"Model saved to {model_path}")
 
+    # ── Visualization ────────────────────────────────────────────────────
+    try:
+        from utils.visualization import visualize_simulation
+        visualize_simulation(
+            metrics=metrics,
+            config=results["config"],
+            edge_nodes=edge_nodes,
+            output_dir=args.output_dir,
+        )
+    except Exception as e:
+        print(f"[Warning] Visualization failed: {e}")
+
     return metrics
 
 
@@ -536,10 +548,20 @@ def main():
     parser.add_argument("--classes-per-node", type=int, default=None, help="Classes per node (k). Auto-set if omitted.")
 
     # Output
-    parser.add_argument("--output-dir", type=str, default="results", help="Output directory")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Output directory. Auto-generated from config + timestamp if omitted.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
     args = parser.parse_args()
+
+    # ── Auto-generate unique output directory ─────────────────────────
+    if args.output_dir is None:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        args.output_dir = f"results/{args.model}_{args.dataset}_n{args.num_nodes}_k{args.kappa}_{ts}"
+    _existing = os.path.join(args.output_dir, "simulation_results.json")
+    if os.path.isfile(_existing):
+        print(f"  WARNING: {_existing} already exists and will be overwritten.")
 
     # ── Auto-set partitioning params from dataset if not provided ────────
     ds_info = DATASET_INFO.get(args.dataset)

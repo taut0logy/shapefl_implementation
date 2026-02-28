@@ -2,7 +2,7 @@
 
 A complete implementation of the ShapeFL (Shaping Data Distribution at Edge for Communication-Efficient Hierarchical Federated Learning) framework using Raspberry Pi devices as edge nodes.
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -16,11 +16,13 @@ ShapeFL is a hierarchical federated learning (HFL) framework that significantly 
 
 ### Key Features
 
--   **Hierarchical Architecture**: Three-tier structure (Cloud Server → Edge Aggregators → Computing Nodes)
--   **Communication Optimization**: Up to 70% reduction in communication cost compared to traditional FL
--   **Data Distribution Shaping**: LoS + GoA algorithms for optimal edge selection and node association
--   **Non-IID Data Support**: Handles imbalanced and heterogeneous data distributions
--   **Hardware Implementation**: Designed for deployment on Raspberry Pi 4 clusters
+- **Hierarchical Architecture**: Three-tier structure (Cloud Server → Edge Aggregators → Computing Nodes)
+- **Communication Optimization**: Up to 70% reduction in communication cost compared to traditional FL
+- **Data Distribution Shaping**: LoS + GoA algorithms for optimal edge selection and node association
+- **Non-IID Data Support**: Handles imbalanced and heterogeneous data distributions
+- **Multiple Models & Datasets**: LeNet-5 + FMNIST, MobileNetV2 + CIFAR-10, ResNet18 + CIFAR-100
+- **Configurable Simulation**: Command-line arguments for model, dataset, and all hyperparameters
+- **Hardware Implementation**: Designed for deployment on Raspberry Pi 4 clusters
 
 ### Architecture
 
@@ -56,47 +58,47 @@ based on communication cost and data distribution similarity.
 
 ### 1. Offline Pre-training Phase
 
--   Each node performs local training (κₚ = 30 epochs)
--   Nodes send linear layer updates (Δw^(L)) to cloud server
--   Cloud computes data distribution similarity matrix: S_ij = 1 - cos(Δw_i^(L), Δw_j^(L))
+- Each node performs local training (κₚ = 30 epochs)
+- Nodes send linear layer updates (Δw^(L)) to cloud server
+- Cloud computes data distribution similarity matrix: S_ij = 1 - cos(Δw_i^(L), Δw_j^(L))
 
 ### 2. Edge Selection & Node Association
 
--   **LoS (Local Search)**: Selects optimal edge aggregators using open/close/swap operations
--   **GoA (Greedy Node Association)**: Assigns nodes to edges minimizing:
-    -   J = κₑ·c_ne - γ·S_ne (communication cost vs. data diversity trade-off)
+- **LoS (Local Search)**: Selects optimal edge aggregators using open/close/swap operations
+- **GoA (Greedy Node Association)**: Assigns nodes to edges minimizing:
+    - J = κₑ·c_ne - γ·S_ne (communication cost vs. data diversity trade-off)
 
 ### 3. Hierarchical Training
 
--   For each communication round (1 to κ):
-    -   Nodes train locally for κₑ epochs
-    -   Edge aggregators collect and aggregate node updates (FedAvg)
-    -   After κc edge epochs, edges send to cloud server
-    -   Cloud performs global aggregation and broadcasts
+- For each communication round (1 to κ):
+    - Nodes train locally for κₑ epochs
+    - Edge aggregators collect and aggregate node updates (FedAvg)
+    - After κc edge epochs, edges send to cloud server
+    - Cloud performs global aggregation and broadcasts
 
 ## Hardware Requirements
 
 ### Cloud Server (Laptop/Desktop)
 
--   **CPU**: Intel i5 or equivalent (4+ cores)
--   **RAM**: 8 GB minimum, 16 GB recommended
--   **GPU**: NVIDIA GPU with CUDA support (optional but recommended)
--   **Storage**: 256 GB SSD
--   **OS**: Ubuntu 24.04 LTS or Windows 10/11
+- **CPU**: Intel i5 or equivalent (4+ cores)
+- **RAM**: 8 GB minimum, 16 GB recommended
+- **GPU**: NVIDIA GPU with CUDA support (optional but recommended)
+- **Storage**: 256 GB SSD
+- **OS**: Ubuntu 24.04 LTS or Windows 10/11
 
 ### Edge Aggregators & Computing Nodes (Raspberry Pi 4)
 
--   **Model**: Raspberry Pi 4 Model B
--   **CPU**: ARM Cortex-A72 (1.5 GHz)
--   **RAM**: 4-8 GB
--   **Storage**: 32 GB MicroSD (Class 10)
--   **Network**: Gigabit Ethernet or Wi-Fi
--   **Quantity**: 8 devices (3 edge aggregators + 5 computing nodes)
+- **Model**: Raspberry Pi 4 Model B
+- **CPU**: ARM Cortex-A72 (1.5 GHz)
+- **RAM**: 4-8 GB
+- **Storage**: 32 GB MicroSD (Class 10)
+- **Network**: Gigabit Ethernet or Wi-Fi
+- **Quantity**: 8 devices (3 edge aggregators + 5 computing nodes)
 
 ### Network
 
--   Local router or Ethernet switch
--   All devices on the same LAN subnet (e.g., 192.168.0.0/24)
+- Local router or Ethernet switch
+- All devices on the same LAN subnet (e.g., 192.168.0.0/24)
 
 ## Installation
 
@@ -183,24 +185,93 @@ class NetworkConfig:
 
 ### Hyperparameters (from Paper)
 
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| κ_p | 30 | Pre-training epochs per node |
-| κ_e | 2 | Local epochs before edge aggregation |
-| κ_c | 10 | Edge epochs before cloud aggregation |
-| κ | 100 | Total communication rounds |
-| γ | 2800 | Trade-off weight (optimal from paper) |
-| B_e | 10 | Max nodes per edge aggregator |
-| batch_size | 32 | Training batch size |
-| lr | 0.001 | Learning rate |
-| s | 12 | Shards per node |
-| k | 4 | Classes per node |
+| Parameter  | Value | Description                           |
+| ---------- | ----- | ------------------------------------- |
+| κ_p        | 30    | Pre-training epochs per node          |
+| κ_e        | 1     | Local epochs before edge aggregation  |
+| κ_c        | 10    | Edge epochs before cloud aggregation  |
+| κ          | 50    | Total communication rounds            |
+| γ          | 2800  | Trade-off weight (optimal from paper) |
+| B_e        | 10    | Max nodes per edge aggregator         |
+| T_max      | 30    | Max LoS iterations                    |
+| batch_size | 32    | Training batch size                   |
+| lr         | 0.001 | Learning rate (SGD)                   |
+
+#### Dataset-Specific Partitioning (from Paper)
+
+| Dataset   | Shards/node (s) | Classes/node (k) |
+| --------- | --------------- | ---------------- |
+| FMNIST    | 12              | 4                |
+| CIFAR-10  | 12              | 4                |
+| CIFAR-100 | 100             | 20               |
+
+> Partitioning parameters are auto-detected from the dataset when using `run_local_simulation.py`.
 
 ## Quick Start
 
-### Test on Localhost (Simulation Mode)
+### Local Simulation (Recommended for Development)
 
-Before deploying to actual Raspberry Pis, test everything on your laptop:
+The local simulation runs the entire ShapeFL pipeline (Algorithm 3) in a single process — no Flask servers or network setup needed.
+
+```bash
+cd src
+source .venv/bin/activate  # Linux
+# .\.venv\Scripts\Activate.ps1  # Windows
+
+# LeNet-5 + Fashion-MNIST (fastest)
+python scripts/run_local_simulation.py --model lenet5 --dataset fmnist
+
+# MobileNetV2 + CIFAR-10
+python scripts/run_local_simulation.py --model mobilenetv2 --dataset cifar10
+
+# ResNet18 + CIFAR-100
+python scripts/run_local_simulation.py --model resnet18 --dataset cifar100
+```
+
+All three model/dataset combinations from the paper are supported. CIFAR datasets are auto-downloaded on first run via torchvision.
+
+#### Customising Parameters
+
+```bash
+python scripts/run_local_simulation.py \
+    --model mobilenetv2 \
+    --dataset cifar10 \
+    --num-nodes 12 \
+    --kappa-p 30 \
+    --kappa-e 1 \
+    --kappa-c 10 \
+    --kappa 100 \
+    --gamma 2800 \
+    --lr 0.001 \
+    --batch-size 32 \
+    --output-dir results/my_experiment
+```
+
+#### All Command-Line Arguments
+
+| Argument             | Type  | Default   | Description                                  |
+| -------------------- | ----- | --------- | -------------------------------------------- |
+| `--model`            | str   | `lenet5`  | Model: `lenet5`, `mobilenetv2`, `resnet18`   |
+| `--dataset`          | str   | `fmnist`  | Dataset: `fmnist`, `cifar10`, `cifar100`     |
+| `--num-nodes`        | int   | `8`       | Total computing nodes                        |
+| `--kappa-p`          | int   | `30`      | Pre-training epochs per node                 |
+| `--kappa-e`          | int   | `1`       | Local epochs per edge round                  |
+| `--kappa-c`          | int   | `10`      | Edge rounds per cloud round                  |
+| `--kappa`            | int   | `50`      | Total cloud aggregation rounds               |
+| `--gamma`            | float | `2800.0`  | Trade-off weight γ                           |
+| `--B-e`              | int   | `10`      | Max nodes per edge aggregator                |
+| `--T-max`            | int   | `30`      | Max LoS iterations                           |
+| `--lr`               | float | `0.001`   | Learning rate (SGD)                          |
+| `--batch-size`       | int   | `32`      | Mini-batch size                              |
+| `--shard-size`       | int   | `15`      | Shard size for non-IID partitioning          |
+| `--shards-per-node`  | int   | _auto_    | Shards per node (s). Auto-set from dataset.  |
+| `--classes-per-node` | int   | _auto_    | Classes per node (k). Auto-set from dataset. |
+| `--output-dir`       | str   | `results` | Output directory                             |
+| `--seed`             | int   | `42`      | Random seed                                  |
+
+### Distributed Simulation (Localhost)
+
+Test the Flask-based distributed mode on your laptop before deploying to Raspberry Pis:
 
 ```bash
 cd src
@@ -217,13 +288,14 @@ curl http://127.0.0.1:5000/status
 ```
 
 Expected output:
+
 ```json
 {
-  "registered_edges": 3,
-  "registered_nodes": 5,
-  "current_round": 0,
-  "pretrain_complete": false,
-  "selected_edges": []
+    "registered_edges": 3,
+    "registered_nodes": 5,
+    "current_round": 0,
+    "pretrain_complete": false,
+    "selected_edges": []
 }
 ```
 
@@ -332,6 +404,7 @@ python scripts/orchestrate.py \
 ```
 
 The orchestrator automates:
+
 1. ✅ Waiting for all registrations
 2. ✅ Triggering pre-training (κ_p = 30 epochs)
 3. ✅ Computing similarity matrix S_ij
@@ -355,141 +428,170 @@ curl http://192.168.0.100:5000/metrics/all
 ## Project Structure
 
 ```
-shapefl_/
-├── dataset/                          # Fashion-MNIST dataset (CSV format)
-│   ├── fashion-mnist_train.csv
-│   └── fashion-mnist_test.csv
+src/
+├── config.py                         # Configuration & hyperparameters
+├── requirements.txt                  # Python dependencies
+├── README.md                         # This file
+├── USER_MANUAL.md                    # Detailed user manual
 │
-├── src/
-│   ├── config.py                     # Configuration & hyperparameters
-│   ├── requirements.txt              # Python dependencies
-│   │
-│   ├── models/
-│   │   ├── __init__.py
-│   │   └── lenet5.py                 # LeNet-5 (61,706 params)
-│   │
-│   ├── data/
-│   │   ├── __init__.py
-│   │   └── data_loader.py            # Non-IID data partitioning
-│   │
-│   ├── algorithms/
-│   │   ├── __init__.py
-│   │   ├── goa.py                    # Algorithm 1: Greedy Node Association
-│   │   └── los.py                    # Algorithm 2: Local Search Edge Selection
-│   │
-│   ├── cloud/
-│   │   ├── __init__.py
-│   │   └── cloud_server.py           # Cloud server + training loop
-│   │
-│   ├── edge/
-│   │   ├── __init__.py
-│   │   └── edge_aggregator.py        # Edge aggregator
-│   │
-│   ├── node/
-│   │   ├── __init__.py
-│   │   └── computing_node.py         # Computing node + pre-training
-│   │
-│   ├── utils/
-│   │   ├── __init__.py
-│   │   ├── communication.py          # HTTP model transfer
-│   │   ├── aggregation.py            # FedAvg implementation
-│   │   ├── metrics.py                # MetricsTracker
-│   │   └── similarity.py             # S_ij = 1 - cos(Δw_i, Δw_j)
-│   │
-│   ├── scripts/
-│   │   ├── partition_data.py         # Create data partitions
-│   │   ├── run_simulation.py         # Localhost testing
-│   │   └── orchestrate.py            # Training orchestrator
-│   │
-│   ├── partitions/                   # Data partition files (generated)
-│   ├── checkpoints/                  # Model checkpoints (generated)
-│   ├── logs/                         # Log files (generated)
-│   └── metrics/                      # Training metrics (generated)
+├── models/                           # Neural network architectures
+│   ├── __init__.py                   # Exports all models and factory
+│   ├── factory.py                    # Model factory: get_model(), get_model_size(), serialisation
+│   ├── lenet5.py                     # LeNet-5 for FMNIST (1×28×28, 61,706 params)
+│   ├── mobilenetv2.py                # MobileNetV2 for CIFAR-10 (3×32×32, 2,236,682 params)
+│   └── resnet18.py                   # ResNet18 for CIFAR-100 (3×32×32, 11,220,132 params)
 │
-├── paper/                            # Original paper references
-├── implementation/                   # Implementation documentation
-├── SETUP_GUIDE.md                    # Detailed deployment guide
-└── README.md                         # This file
+├── data/
+│   ├── __init__.py
+│   └── data_loader.py                # load_data(), CIFAR-10/100 loaders, non-IID partitioning
+│
+├── algorithms/
+│   ├── __init__.py
+│   ├── goa.py                        # Algorithm 1: Greedy Node Association (GoA)
+│   └── los.py                        # Algorithm 2: Local Search Edge Selection (LoS)
+│
+├── cloud/
+│   ├── __init__.py
+│   └── cloud_server.py               # Cloud server (Flask) + global aggregation
+│
+├── edge/
+│   ├── __init__.py
+│   └── edge_aggregator.py            # Edge aggregator (Flask)
+│
+├── node/
+│   ├── __init__.py
+│   └── computing_node.py             # Computing node (Flask) + local training
+│
+├── utils/
+│   ├── __init__.py
+│   ├── aggregation.py                # FedAvg, weighted averaging, generic get_linear_layer_update()
+│   ├── similarity.py                 # S_ij = 1 − cos(Δw_i^(L), Δw_j^(L))
+│   ├── communication.py              # HTTP model transfer helpers
+│   └── metrics.py                    # MetricsTracker
+│
+├── scripts/
+│   ├── run_local_simulation.py       # ★ Main entry point: single-process simulation
+│   ├── run_simulation.py             # Distributed localhost simulation
+│   ├── orchestrate.py                # Distributed training orchestrator
+│   ├── partition_data.py             # Standalone data partitioning
+│   ├── run_cloud.py                  # Start cloud server
+│   ├── run_edge.py                   # Start edge aggregator
+│   └── run_node.py                   # Start computing node
+│
+├── dataset/                          # Dataset files (auto-populated)
+│   ├── fashion-mnist_train.csv       # FMNIST training data (bundled)
+│   ├── fashion-mnist_test.csv        # FMNIST test data (bundled)
+│   ├── cifar-10-batches-py/          # CIFAR-10 (auto-downloaded)
+│   └── cifar-100-python/             # CIFAR-100 (auto-downloaded)
+│
+├── results/                          # Simulation outputs (generated)
+├── partitions/                       # Data partitions (generated)
+├── checkpoints/                      # Model checkpoints (generated)
+├── logs/                             # Log files (generated)
+└── metrics/                          # Training metrics (generated)
 ```
 
 ## Experiments and Results
 
-### Dataset
+### Supported Model / Dataset Combinations
 
-**Fashion-MNIST**
+All three pairings evaluated in the paper are implemented:
 
--   60,000 training images (28×28 grayscale)
--   10,000 test images
--   10 classes (T-shirt, Trouser, Pullover, Dress, Coat, Sandal, Shirt, Sneaker, Bag, Ankle boot)
+| #   | Model           | Dataset       | Classes | Input Size  | Parameters | Partitioning (s, k) |
+| --- | --------------- | ------------- | ------- | ----------- | ---------- | ------------------- |
+| 1   | **LeNet-5**     | Fashion-MNIST | 10      | 1 × 28 × 28 | 61,706     | s=12, k=4           |
+| 2   | **MobileNetV2** | CIFAR-10      | 10      | 3 × 32 × 32 | 2,236,682  | s=12, k=4           |
+| 3   | **ResNet18**    | CIFAR-100     | 100     | 3 × 32 × 32 | 11,220,132 | s=100, k=20         |
 
-### Model
+### Datasets
 
-**LeNet-5**
+| Dataset           | Train                    | Test   | Download                                            |
+| ----------------- | ------------------------ | ------ | --------------------------------------------------- |
+| **Fashion-MNIST** | 60,000 (28×28 grayscale) | 10,000 | Bundled as CSV; also auto-downloads via torchvision |
+| **CIFAR-10**      | 50,000 (32×32 colour)    | 10,000 | Auto-downloaded (~170 MB) on first run              |
+| **CIFAR-100**     | 50,000 (32×32 colour)    | 10,000 | Auto-downloaded (~170 MB) on first run              |
 
--   Architecture: Conv(6)→Pool→Conv(16)→Pool→FC(120)→FC(84)→FC(10)
--   Parameters: 61,706
--   Linear layer: 850 parameters (84×10 + 10 biases) - used for similarity computation
--   Model size: ~250 KB (uncompressed), ~80 KB (gzip compressed)
+### Models
+
+**LeNet-5** — Conv(6) → Pool → Conv(16) → Pool → FC(120) → FC(84) → FC(10). Linear layer `fc3` (850 params) used for similarity.
+
+**MobileNetV2** — Inverted residual blocks, adapted for 32×32 input (stride-1 first conv). Classifier layer `classifier` (12,810 params) used for similarity.
+
+**ResNet18** — BasicBlock ×[2,2,2,2], adapted for 32×32 input (3×3 first conv, no maxpool). Linear layer `linear` (51,300 params) used for similarity.
 
 ### Non-IID Data Partitioning
 
 Following the paper's methodology:
 
--   Each node gets 12 shards of size 15 (180 samples total)
--   Data comes from only 4 out of 10 classes per node
--   Creates significant data heterogeneity across nodes
+- The training dataset is divided into shards of size 15
+- Each computing node receives _s_ shards from _k_ classes
+- For FMNIST / CIFAR-10: 12 shards from 4 classes (180 samples/node)
+- For CIFAR-100: 100 shards from 20 classes (1,500 samples/node)
 
 ### Expected Performance (from Paper)
 
-Compared to baseline FedAvg:
+Compared to baseline HierFAVG:
 
--   **Communication Cost**: ~45% reduction (FMNIST dataset)
--   **Accuracy**: +3-5% improvement due to better data distribution
--   **Convergence**: Faster convergence with fewer communication rounds
+- **Communication Cost**: ~45% reduction (FMNIST), significant reductions on CIFAR-10/100
+- **Accuracy**: +3-5% improvement due to better data distribution at edges
+- **Convergence**: Faster convergence with fewer communication rounds
 
-### Communication Cost Calculation
+### Simulation Output
 
-Per cloud aggregation round:
+Each simulation run produces:
 
-```
-Total = (num_nodes × κₑ + num_edges) × 2 × model_size
-      = (5 × 2 + 3) × 2 × 80 KB
-      = 2,080 KB per round
-```
-
-With κ = 100 rounds:
-
-```
-Total Communication = 100 × 2,080 KB = 208 MB
-```
+- `simulation_results.json` — full config, per-round accuracy/loss, edge selections, node associations
+- `final_model.pt` — saved PyTorch state dict of the final global model
 
 ## Monitoring and Evaluation
 
 ### API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/status` | GET | Get registration and training status |
-| `/health` | GET | Health check |
-| `/metrics/latest` | GET | Get most recent training metrics |
-| `/metrics/all` | GET | Get full metrics history |
-| `/config/edges` | GET | Get edge selection and node assignments |
-| `/algorithms/run` | POST | Trigger LoS + GoA execution |
-| `/training/start` | POST | Start hierarchical training loop |
-| `/pretrain/start` | POST | Trigger pre-training on nodes |
-| `/edge/assign` | POST | Assign node to edge aggregator |
+| Endpoint          | Method | Description                             |
+| ----------------- | ------ | --------------------------------------- |
+| `/status`         | GET    | Get registration and training status    |
+| `/health`         | GET    | Health check                            |
+| `/metrics/latest` | GET    | Get most recent training metrics        |
+| `/metrics/all`    | GET    | Get full metrics history                |
+| `/config/edges`   | GET    | Get edge selection and node assignments |
+| `/algorithms/run` | POST   | Trigger LoS + GoA execution             |
+| `/training/start` | POST   | Start hierarchical training loop        |
+| `/pretrain/start` | POST   | Trigger pre-training on nodes           |
+| `/edge/assign`    | POST   | Assign node to edge aggregator          |
 
 ### Metrics Export
 
-Training metrics are saved in `src/metrics/training_metrics.json`:
+Simulation results are saved in `<output-dir>/simulation_results.json`:
 
 ```json
 {
-  "round": [1, 2, 3, ...],
-  "accuracy": [0.75, 0.78, 0.82, ...],
-  "loss": [0.5, 0.45, 0.4, ...],
-  "communication_cost": [2080000, 2080000, ...],
-  "cumulative_comm_cost": [2080000, 4160000, ...]
+  "config": {
+    "model": "lenet5",
+    "dataset": "fmnist",
+    "num_classes": 10,
+    "num_nodes": 8,
+    "kappa_p": 30,
+    "kappa_e": 1,
+    "kappa_c": 10,
+    "kappa": 50,
+    "gamma": 2800.0,
+    "lr": 0.001,
+    "batch_size": 32
+  },
+  "results": {
+    "final_accuracy": 0.6523,
+    "best_accuracy": 0.6701,
+    "best_round": 47,
+    "total_time_seconds": 120.5
+  },
+  "selected_edges": [2, 5],
+  "node_associations": {"0": 2, "1": 2, "2": 5, ...},
+  "metrics": {
+    "round": [1, 2, 3, ...],
+    "accuracy": [0.25, 0.32, 0.38, ...],
+    "loss": [2.1, 1.85, 1.6, ...],
+    "local_epochs": [10, 20, 30, ...]
+  }
 }
 ```
 
@@ -499,17 +601,19 @@ Training metrics are saved in `src/metrics/training_metrics.json`:
 import json
 import matplotlib.pyplot as plt
 
-with open('metrics/training_metrics.json', 'r') as f:
-    metrics = json.load(f)
+with open('results/simulation_results.json', 'r') as f:
+    data = json.load(f)
 
-# Plot accuracy vs communication cost
+metrics = data['metrics']
+
+# Plot accuracy over cloud rounds
 plt.figure(figsize=(10, 6))
-plt.plot(metrics['cumulative_comm_cost'], metrics['accuracy'], marker='o')
-plt.xlabel('Cumulative Communication Cost (bytes)')
+plt.plot(metrics['round'], metrics['accuracy'], marker='o')
+plt.xlabel('Cloud Round')
 plt.ylabel('Test Accuracy')
-plt.title('ShapeFL: Accuracy vs Communication Cost')
+plt.title(f"ShapeFL: {data['config']['model']} + {data['config']['dataset']}")
 plt.grid(True)
-plt.savefig('accuracy_vs_comm.png', dpi=300)
+plt.savefig('accuracy_curve.png', dpi=300)
 ```
 
 ## Troubleshooting
@@ -529,15 +633,18 @@ ping 192.168.0.101
 **2. Out of Memory on Raspberry Pi**
 
 ```python
-# In config.py, reduce batch size
+# Reduce batch size
 batch_size: int = 16  # Instead of 32
 ```
 
+ResNet18 + CIFAR-100 is large (~43 MB). Consider using LeNet-5 + FMNIST for Raspberry Pi deployments.
+
 **3. Slow Training**
 
--   Use Ethernet instead of Wi-Fi
--   Check Pi temperature: `vcgencmd measure_temp`
--   Ensure Pi is not throttling
+- MobileNetV2 and ResNet18 are significantly slower than LeNet-5 on CPU
+- Use GPU (`torch.cuda`) when available — the simulation auto-detects CUDA
+- Use Ethernet instead of Wi-Fi for distributed mode
+- Check Pi temperature: `vcgencmd measure_temp`
 
 **4. Model Mismatch Errors**
 
@@ -548,8 +655,8 @@ pip list | grep torch
 
 **5. Pre-training Timeout**
 
--   Increase timeout in `orchestrate.py`
--   Check if all nodes have data partitions
+- Increase timeout in `orchestrate.py`
+- Check if all nodes have data partitions
 
 ## Contributing
 
@@ -589,30 +696,36 @@ If you use this implementation in your research, please cite the original ShapeF
 
 2. H. Brendan McMahan et al., "Communication-Efficient Learning of Deep Networks from Decentralized Data," in AISTATS, 2017.
 
-3. Yann LeCun et al., "Gradient-based learning applied to document recognition," in Proceedings of the IEEE, 1998.
+3. Y. LeCun et al., "Gradient-based learning applied to document recognition," in Proceedings of the IEEE, 1998.
 
-4. Fashion-MNIST Dataset: https://github.com/zalandoresearch/fashion-mnist
+4. M. Sandler et al., "MobileNetV2: Inverted Residuals and Linear Bottlenecks," in CVPR, 2018.
+
+5. K. He et al., "Deep Residual Learning for Image Recognition," in CVPR, 2016.
+
+6. Fashion-MNIST Dataset: https://github.com/zalandoresearch/fashion-mnist
+
+7. CIFAR-10/100 Datasets: https://www.cs.toronto.edu/~kriz/cifar.html
 
 ## 👥 Authors
 
--   **Raufun Ahsan** - Khulna University of Engineering & Technology
--   **Md. Sakibur Rahman** - Khulna University of Engineering & Technology
+- **Raufun Ahsan** - Khulna University of Engineering & Technology
+- **Md. Sakibur Rahman** - Khulna University of Engineering & Technology
 
 ## Acknowledgments
 
--   Original ShapeFL paper authors for the groundbreaking research
--   PyTorch team for the excellent deep learning framework
--   Raspberry Pi Foundation for affordable edge computing hardware
--   Fashion-MNIST dataset creators
+- Original ShapeFL paper authors for the groundbreaking research
+- PyTorch team for the excellent deep learning framework
+- Raspberry Pi Foundation for affordable edge computing hardware
+- Fashion-MNIST and CIFAR dataset creators for providing benchmark datasets
 
 ## Contact
 
 For questions or support, please open an issue on GitHub or contact:
 
--   Email: raufun.ahsan@gmail.com
--   GitHub: [@taut0logy](https://github.com/taut0logy)
--   Email: sakiburrahman11.msr@gmail.com
--   GitHub: [@SakiburRahman07](https://github.com/SakiburRahman07)
+- Email: raufun.ahsan@gmail.com
+- GitHub: [@taut0logy](https://github.com/taut0logy)
+- Email: sakiburrahman11.msr@gmail.com
+- GitHub: [@SakiburRahman07](https://github.com/SakiburRahman07)
 
 ---
 

@@ -15,7 +15,7 @@ Per-step greedy criterion (Algorithm 1, line 9):
 Where Delta_S_ne (line 8) is the CHANGE in the diversity measure when adding node n to edge e:
     Delta_S_ne = [Sum_{i,j in M'_e} S_ij*D_i*D_j / C(D'_e,2)] - [Sum_{i,j in M_e} S_ij*D_i*D_j / C(D_e,2)]
 
-Reference: Paper Section IV-C, Algorithm 1 (page 2606)
+Reference: Paper Section IV-C, Algorithm 1
 """
 
 import numpy as np

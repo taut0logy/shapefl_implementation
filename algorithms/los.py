@@ -18,7 +18,7 @@ The algorithm uses three local search operations:
 - close(e): Remove edge aggregator e from the current solution
 - swap(e, e'): Replace edge aggregator e' with e in the current solution
 
-Reference: Paper Section IV-C, Algorithm 2 (page 2606)
+Reference: Paper Section IV-C, Algorithm 2
 """
 
 import numpy as np

@@ -28,7 +28,7 @@ from typing import List
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import TRAINING_CONFIG
-from models.lenet5 import get_model
+from models.factory import get_model
 from data.data_loader import load_fmnist_data, load_partitions, get_node_dataloader
 from utils.communication import (
     model_to_bytes,

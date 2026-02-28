@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import TRAINING_CONFIG, PATH_CONFIG
-from models.lenet5 import get_model
+from models.factory import get_model
 from data.data_loader import load_fmnist_data
 from algorithms.los import run_los
 from utils.communication import (

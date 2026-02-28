@@ -11,7 +11,6 @@ Used in ShapeFL paper for FMNIST experiments.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, Tuple, Optional
 
 
 class LeNet5(nn.Module):
@@ -33,6 +32,7 @@ class LeNet5(nn.Module):
 
     def __init__(self, num_classes: int = 10, input_channels: int = 1):
         super(LeNet5, self).__init__()
+        self.linear_layer_name = "fc3"  # For ShapeFL similarity
 
         # Convolutional layers
         self.conv1 = nn.Conv2d(input_channels, 6, kernel_size=5, padding=2)
@@ -79,104 +79,14 @@ class LeNet5(nn.Module):
         return self.fc3.weight.numel() + self.fc3.bias.numel()
 
 
-def get_model(
-    model_name: str = "lenet5",
-    num_classes: int = 10,
-    input_channels: int = 1,
-    device: Optional[torch.device] = None,
-) -> nn.Module:
-    """
-    Factory function to get a model by name.
-
-    Args:
-        model_name: Name of the model ("lenet5")
-        num_classes: Number of output classes
-        input_channels: Number of input channels
-        device: Device to place the model on
-
-    Returns:
-        Initialized model
-    """
-    if model_name.lower() == "lenet5":
-        model = LeNet5(num_classes=num_classes, input_channels=input_channels)
-    else:
-        raise ValueError(f"Unknown model: {model_name}")
-
-    if device is not None:
-        model = model.to(device)
-
-    return model
-
-
-def get_model_size(model: nn.Module) -> Tuple[int, float]:
-    """
-    Calculate the number of parameters and size in MB.
-
-    Args:
-        model: PyTorch model
-
-    Returns:
-        Tuple of (num_parameters, size_in_mb)
-    """
-    num_params = sum(p.numel() for p in model.parameters())
-    size_mb = sum(p.numel() * p.element_size() for p in model.parameters()) / (
-        1024 * 1024
-    )
-    return num_params, size_mb
-
-
-def model_to_dict(model: nn.Module) -> Dict[str, list]:
-    """
-    Convert model parameters to a dictionary of lists (for JSON serialization).
-
-    Args:
-        model: PyTorch model
-
-    Returns:
-        Dictionary mapping parameter names to lists
-    """
-    return {
-        name: param.cpu().detach().numpy().tolist()
-        for name, param in model.state_dict().items()
-    }
-
-
-def dict_to_model(model: nn.Module, params_dict: Dict[str, list]) -> nn.Module:
-    """
-    Load model parameters from a dictionary.
-
-    Args:
-        model: PyTorch model to load parameters into
-        params_dict: Dictionary mapping parameter names to lists
-
-    Returns:
-        Model with loaded parameters
-    """
-    state_dict = {name: torch.tensor(param) for name, param in params_dict.items()}
-    model.load_state_dict(state_dict)
-    return model
-
-
 if __name__ == "__main__":
-    # Test the model
     model = LeNet5()
-
-    # Print architecture
     print("LeNet-5 Architecture:")
     print(model)
-
-    # Calculate size
-    num_params, size_mb = get_model_size(model)
+    num_params = sum(p.numel() for p in model.parameters())
     print(f"\nTotal parameters: {num_params:,}")
-    print(f"Model size: {size_mb:.3f} MB")
-
-    # Test forward pass
     x = torch.randn(1, 1, 28, 28)
     y = model(x)
-    print(f"\nInput shape: {x.shape}")
+    print(f"Input shape: {x.shape}")
     print(f"Output shape: {y.shape}")
-
-    # Test linear layer extraction
-    linear_params = model.get_linear_layer_params()
-    print(f"\nLinear layer parameters: {linear_params.shape[0]}")
-    print(f"  (84*10 weights + 10 biases = {84*10 + 10})")
+    print(f"Linear layer params: {model.get_linear_layer_size()}")

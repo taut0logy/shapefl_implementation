@@ -26,7 +26,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import TRAINING_CONFIG
-from models.lenet5 import get_model
+from models.factory import get_model
 from utils.communication import (
     model_to_bytes,
     bytes_to_model,

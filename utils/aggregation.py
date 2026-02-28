@@ -139,6 +139,10 @@ def get_linear_layer_update(new_model: nn.Module, old_model: nn.Module) -> torch
     This is used in ShapeFL for computing data distribution similarity S_ij
     based on the cosine distance of linear layer updates.
 
+    Works generically for any model that exposes a ``linear_layer_name``
+    attribute (e.g. "fc3" for LeNet5, "classifier" for MobileNetV2,
+    "linear" for ResNet18).
+
     Args:
         new_model: Model after training
         old_model: Model before training
@@ -146,13 +150,28 @@ def get_linear_layer_update(new_model: nn.Module, old_model: nn.Module) -> torch
     Returns:
         Flattened tensor of linear layer update
     """
-    # For LeNet5, the linear layer is 'fc3'
+    # Determine the linear-layer name via the model attribute
+    layer_name = getattr(new_model, "linear_layer_name", None)
+    if layer_name is None:
+        # Fallback: try common names
+        for candidate in ("fc3", "classifier", "linear", "fc"):
+            if f"{candidate}.weight" in new_model.state_dict():
+                layer_name = candidate
+                break
+    if layer_name is None:
+        raise ValueError(
+            "Cannot determine linear layer name. Set model.linear_layer_name."
+        )
+
+    weight_key = f"{layer_name}.weight"
+    bias_key = f"{layer_name}.bias"
+
     new_state = new_model.state_dict()
     old_state = old_model.state_dict()
 
     # Get weight and bias updates for the output layer
-    weight_update = new_state["fc3.weight"] - old_state["fc3.weight"]
-    bias_update = new_state["fc3.bias"] - old_state["fc3.bias"]
+    weight_update = new_state[weight_key] - old_state[weight_key]
+    bias_update = new_state[bias_key] - old_state[bias_key]
 
     # Flatten and concatenate
     return torch.cat([weight_update.flatten(), bias_update.flatten()])

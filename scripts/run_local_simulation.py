@@ -6,11 +6,18 @@ Clean single-process simulation of the full ShapeFL pipeline (Algorithm 3).
 Runs all components in memory without Flask/HTTP for accurate verification
 against paper results.
 
-Usage:
-    python scripts/run_local_simulation.py [options]
+Supports all three model/dataset combinations from the paper:
+  1) LeNet-5      + Fashion-MNIST  (10 classes, s=12, k=4)
+  2) MobileNetV2  + CIFAR-10       (10 classes, s=12, k=4)
+  3) ResNet18     + CIFAR-100     (100 classes, s=100, k=20)
 
-Paper reference settings for FMNIST + LeNet5:
-    --num-nodes 8 --kappa-e 1 --kappa-c 10 --kappa 50 --gamma 2800
+Usage:
+    python scripts/run_local_simulation.py --model lenet5   --dataset fmnist   [options]
+    python scripts/run_local_simulation.py --model mobilenetv2 --dataset cifar10 [options]
+    python scripts/run_local_simulation.py --model resnet18 --dataset cifar100 [options]
+
+Paper reference hyperparameters:
+    --kappa-p 30 --kappa-e 1 --kappa-c 10 --kappa 50 --gamma 2800 --batch-size 32 --lr 0.001
 """
 
 import os
@@ -30,11 +37,13 @@ from typing import Dict, List, Set, Tuple, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import TRAINING_CONFIG, PATH_CONFIG
-from models.lenet5 import get_model, get_model_size
+from models.factory import get_model, get_model_size
 from data.data_loader import (
-    load_fmnist_data,
+    load_data,
     create_non_iid_partitions,
     get_node_dataloader,
+    DATASET_INFO,
+    DATASET_DEFAULT_MODEL,
 )
 from algorithms.goa import run_goa
 from algorithms.los import run_los
@@ -171,6 +180,8 @@ def run_simulation(args):
     print("\n" + "=" * 70)
     print("ShapeFL Local Simulation")
     print("=" * 70)
+    print(f"Model: {args.model}")
+    print(f"Dataset: {args.dataset}")
     print(f"Nodes: {args.num_nodes}")
     print(f"kappa_p (pre-train epochs): {args.kappa_p}")
     print(f"kappa_e (local epochs per edge round): {args.kappa_e}")
@@ -187,13 +198,20 @@ def run_simulation(args):
     # Step 1: Initialize global model (Algorithm 3, line 1)
     # =========================================================================
     print("\n[Step 1] Initializing global model...")
+
+    # Resolve dataset metadata
+    ds_info = DATASET_INFO[args.dataset]
+    num_classes = ds_info["num_classes"]
+    input_channels = ds_info["input_channels"]
+
     global_model = get_model(
-        model_name="lenet5",
-        num_classes=10,
+        model_name=args.model,
+        num_classes=num_classes,
+        input_channels=input_channels,
         device=device,
     )
     num_params, size_mb = get_model_size(global_model)
-    print(f"  LeNet-5: {num_params:,} parameters, {size_mb:.3f} MB")
+    print(f"  {args.model}: {num_params:,} parameters, {size_mb:.3f} MB")
 
     # Save initial model weights for pre-training reference
     initial_state = copy.deepcopy(global_model.state_dict())
@@ -201,8 +219,8 @@ def run_simulation(args):
     # =========================================================================
     # Step 2: Load data and create non-IID partitions
     # =========================================================================
-    print("\n[Step 2] Loading Fashion-MNIST and creating non-IID partitions...")
-    train_dataset, test_dataset = load_fmnist_data()
+    print(f"\n[Step 2] Loading {args.dataset.upper()} and creating non-IID partitions...")
+    train_dataset, test_dataset = load_data(dataset_name=args.dataset)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
 
     partitions = create_non_iid_partitions(
@@ -282,6 +300,11 @@ def run_simulation(args):
     selected_edges = los_result.selected_edges
     associations = los_result.node_associations.associations
     edge_nodes = los_result.node_associations.edge_nodes
+
+    # Normalise numpy ints to native Python ints for clean printing / JSON
+    selected_edges = {int(e) for e in selected_edges}
+    associations = {int(k): int(v) for k, v in associations.items()}
+    edge_nodes = {int(e): [int(n) for n in nodes] for e, nodes in edge_nodes.items()}
 
     print(f"\n  Selected edge aggregators: {sorted(selected_edges)}")
     for e in sorted(selected_edges):
@@ -420,6 +443,9 @@ def run_simulation(args):
 
     results = {
         "config": {
+            "model": args.model,
+            "dataset": args.dataset,
+            "num_classes": num_classes,
             "num_nodes": args.num_nodes,
             "kappa_p": args.kappa_p,
             "kappa_e": args.kappa_e,
@@ -463,6 +489,18 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
+    # Model / dataset selection
+    parser.add_argument(
+        "--model", type=str, default="lenet5",
+        choices=["lenet5", "mobilenetv2", "resnet18"],
+        help="Model architecture",
+    )
+    parser.add_argument(
+        "--dataset", type=str, default="fmnist",
+        choices=["fmnist", "cifar10", "cifar100"],
+        help="Dataset to train on",
+    )
+
     # Node configuration
     parser.add_argument("--num-nodes", type=int, default=8, help="Total number of computing nodes")
 
@@ -479,16 +517,26 @@ def main():
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate (SGD)")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
 
-    # Data partitioning (Paper: s=12, k=4 for FMNIST)
+    # Data partitioning (Paper: s=12, k=4 for FMNIST/CIFAR-10; s=100, k=20 for CIFAR-100)
+    # Set to None to auto-detect from dataset
     parser.add_argument("--shard-size", type=int, default=15, help="Shard size")
-    parser.add_argument("--shards-per-node", type=int, default=12, help="Shards per node (s)")
-    parser.add_argument("--classes-per-node", type=int, default=4, help="Classes per node (k)")
+    parser.add_argument("--shards-per-node", type=int, default=None, help="Shards per node (s). Auto-set if omitted.")
+    parser.add_argument("--classes-per-node", type=int, default=None, help="Classes per node (k). Auto-set if omitted.")
 
     # Output
     parser.add_argument("--output-dir", type=str, default="results", help="Output directory")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
     args = parser.parse_args()
+
+    # ── Auto-set partitioning params from dataset if not provided ────────
+    ds_info = DATASET_INFO.get(args.dataset)
+    if ds_info is None:
+        parser.error(f"Unknown dataset: {args.dataset}")
+    if args.shards_per_node is None:
+        args.shards_per_node = ds_info["shards_per_node"]
+    if args.classes_per_node is None:
+        args.classes_per_node = ds_info["classes_per_node"]
 
     # Set seeds for reproducibility
     torch.manual_seed(args.seed)

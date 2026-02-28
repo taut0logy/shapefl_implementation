@@ -6,7 +6,13 @@ Implements data loading and non-IID partitioning following the paper's methodolo
 Paper Method (Section V-A):
 - Each training dataset is divided into shards of size 15
 - Each computing node is distributed with s shards from k classes
-- For FMNIST: s=12, k=4 (each node gets 12 shards from 4 classes = 180 samples)
+- For FMNIST/CIFAR-10: s=12, k=4
+- For CIFAR-100: s=100, k=20
+
+Supported datasets:
+- fmnist   : Fashion-MNIST (1×28×28, 10 classes)
+- cifar10  : CIFAR-10      (3×32×32, 10 classes)
+- cifar100 : CIFAR-100     (3×32×32, 100 classes)
 """
 
 import os
@@ -15,8 +21,41 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset
 from torchvision import datasets, transforms
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 import pandas as pd
+
+
+# ── Dataset metadata (used by the simulation script) ────────────────────────
+DATASET_INFO = {
+    "fmnist": {
+        "num_classes": 10,
+        "input_channels": 1,
+        "input_size": (28, 28),
+        "shards_per_node": 12,   # s in paper
+        "classes_per_node": 4,   # k in paper
+    },
+    "cifar10": {
+        "num_classes": 10,
+        "input_channels": 3,
+        "input_size": (32, 32),
+        "shards_per_node": 12,
+        "classes_per_node": 4,
+    },
+    "cifar100": {
+        "num_classes": 100,
+        "input_channels": 3,
+        "input_size": (32, 32),
+        "shards_per_node": 100,
+        "classes_per_node": 20,
+    },
+}
+
+# Default model for each dataset (paper pairings)
+DATASET_DEFAULT_MODEL = {
+    "fmnist": "lenet5",
+    "cifar10": "mobilenetv2",
+    "cifar100": "resnet18",
+}
 
 
 class FMNISTDataset(Dataset):
@@ -93,6 +132,118 @@ def load_fmnist_data(
     print(f"Test dataset: {len(test_dataset)} samples")
 
     return train_dataset, test_dataset
+
+
+def load_cifar10_data(
+    data_dir: str = None,
+) -> Tuple[Dataset, Dataset]:
+    """
+    Load CIFAR-10 dataset via torchvision (auto-downloads if needed).
+
+    Args:
+        data_dir: Root directory for the dataset cache.
+
+    Returns:
+        Tuple of (train_dataset, test_dataset)
+    """
+    if data_dir is None:
+        data_dir = os.path.join(os.path.dirname(__file__), "..", "dataset")
+
+    print("Loading CIFAR-10 from torchvision...")
+
+    # Paper does not specify data augmentation – use simple normalisation
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465),
+                             (0.2470, 0.2435, 0.2616)),
+    ])
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465),
+                             (0.2470, 0.2435, 0.2616)),
+    ])
+
+    train_dataset = datasets.CIFAR10(
+        root=data_dir, train=True, download=True, transform=transform_train,
+    )
+    test_dataset = datasets.CIFAR10(
+        root=data_dir, train=False, download=True, transform=transform_test,
+    )
+
+    print(f"Train dataset: {len(train_dataset)} samples")
+    print(f"Test dataset: {len(test_dataset)} samples")
+    return train_dataset, test_dataset
+
+
+def load_cifar100_data(
+    data_dir: str = None,
+) -> Tuple[Dataset, Dataset]:
+    """
+    Load CIFAR-100 dataset via torchvision (auto-downloads if needed).
+
+    Args:
+        data_dir: Root directory for the dataset cache.
+
+    Returns:
+        Tuple of (train_dataset, test_dataset)
+    """
+    if data_dir is None:
+        data_dir = os.path.join(os.path.dirname(__file__), "..", "dataset")
+
+    print("Loading CIFAR-100 from torchvision...")
+
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5071, 0.4867, 0.4408),
+                             (0.2675, 0.2565, 0.2761)),
+    ])
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5071, 0.4867, 0.4408),
+                             (0.2675, 0.2565, 0.2761)),
+    ])
+
+    train_dataset = datasets.CIFAR100(
+        root=data_dir, train=True, download=True, transform=transform_train,
+    )
+    test_dataset = datasets.CIFAR100(
+        root=data_dir, train=False, download=True, transform=transform_test,
+    )
+
+    print(f"Train dataset: {len(train_dataset)} samples")
+    print(f"Test dataset: {len(test_dataset)} samples")
+    return train_dataset, test_dataset
+
+
+def load_data(
+    dataset_name: str = "fmnist",
+    data_dir: str = None,
+) -> Tuple[Dataset, Dataset]:
+    """
+    Unified data-loading entry point.
+
+    Args:
+        dataset_name: One of "fmnist", "cifar10", "cifar100".
+        data_dir: Root directory for dataset cache (default: ../dataset).
+
+    Returns:
+        Tuple of (train_dataset, test_dataset)
+    """
+    name = dataset_name.lower()
+    if name == "fmnist":
+        return load_fmnist_data(data_dir=data_dir)
+    elif name == "cifar10":
+        return load_cifar10_data(data_dir=data_dir)
+    elif name == "cifar100":
+        return load_cifar100_data(data_dir=data_dir)
+    else:
+        raise ValueError(
+            f"Unknown dataset: {dataset_name}. Choose from: fmnist, cifar10, cifar100"
+        )
 
 
 def create_non_iid_partitions(

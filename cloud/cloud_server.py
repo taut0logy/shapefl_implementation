@@ -294,26 +294,36 @@ class CloudServer:
         Returns:
             Tuple of (c_ne dict, c_ec dict)
         """
-        # In LAN, costs are relatively uniform
-        # We can use node indices as a proxy for "distance"
+        # Paper convention: c_ne = 0.002 * d_ne(km) * S_m(GB)
+        #                   c_ec = 0.02  * d_ec(km) * S_m(GB)
         c_ne = {}  # (node, edge) -> cost
         c_ec = {}  # edge -> cost to cloud
 
         node_ids = list(self.registered_nodes.keys())
         edge_ids = list(self.registered_edges.keys())
 
-        # Node to edge costs (based on model size)
-        model_size = len(model_to_bytes(self.global_model))
+        # Model size in GB (paper convention)
+        model_size_bytes = len(model_to_bytes(self.global_model))
+        model_size_gb = model_size_bytes / (1024 ** 3)
+
+        # For LAN deployment, use small simulated distances (km)
+        import numpy as np
+        np.random.seed(42)
+        num_total = max(len(node_ids), len(edge_ids))
+        positions = np.random.rand(num_total, 2) * 1000  # 1000 km region
+        cloud_pos = np.array([500.0, 3500.0])  # Remote cloud
 
         for n_idx, node_id in enumerate(node_ids):
             for e_idx, edge_id in enumerate(edge_ids):
-                # Simplified cost: model_size * (1 + small variation)
-                variation = 0.1 * abs(n_idx - e_idx) / max(len(node_ids), 1)
-                c_ne[(n_idx, e_idx)] = model_size * (1 + variation)
+                if n_idx == e_idx:
+                    c_ne[(n_idx, e_idx)] = 0.0
+                else:
+                    dist = np.linalg.norm(positions[n_idx] - positions[e_idx])
+                    c_ne[(n_idx, e_idx)] = 0.002 * dist * model_size_gb
 
-        # Edge to cloud costs
         for e_idx, edge_id in enumerate(edge_ids):
-            c_ec[e_idx] = model_size * 1.5  # Slightly higher for cloud
+            dist = np.linalg.norm(positions[e_idx] - cloud_pos)
+            c_ec[e_idx] = 0.02 * dist * model_size_gb
 
         return c_ne, c_ec
 

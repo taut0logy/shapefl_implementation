@@ -193,18 +193,18 @@ def compute_communication_cost(
     else:
         model_size = len(model_bytes)
 
-    # Communication pattern per cloud aggregation round:
-    # 1. Each node sends to its edge: num_nodes * kappa_e * model_size
-    # 2. Each edge sends to cloud: num_edges * model_size
-    # 3. Cloud sends to each edge: num_edges * model_size
-    # 4. Each edge sends to its nodes: num_nodes * model_size
+    # Communication pattern per cloud aggregation round (Algorithm 3):
+    # Each cloud round has kappa_c edge epochs.
+    # Per edge epoch: each node sends 1 model to edge, edge sends 1 model back.
+    # After kappa_c edge epochs: each edge sends 1 model to cloud, cloud sends back.
+    #
+    # 1. Node <-> Edge: kappa_c rounds of upload + download = 2 * kappa_c * num_nodes
+    # 2. Edge <-> Cloud: 1 upload + 1 download = 2 * num_edges
 
-    node_to_edge = num_nodes * kappa_e * model_size
-    edge_to_cloud = num_edges * model_size
-    cloud_to_edge = num_edges * model_size
-    edge_to_node = num_nodes * model_size
+    node_edge_comm = 2 * kappa_c * num_nodes * model_size
+    edge_cloud_comm = 2 * num_edges * model_size
 
-    total = node_to_edge + edge_to_cloud + cloud_to_edge + edge_to_node
+    total = node_edge_comm + edge_cloud_comm
 
     return total
 

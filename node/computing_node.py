@@ -320,7 +320,7 @@ class ComputingNode:
         self.model.to(self.device)
 
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.SGD(self.model.parameters(), lr=TRAINING_CONFIG.learning_rate)
+        optimizer = optim.SGD(self.model.parameters(), lr=TRAINING_CONFIG.learning_rate, momentum=0.9)
 
         total_loss = 0.0
         num_batches = 0
@@ -372,7 +372,7 @@ class ComputingNode:
         # Train locally
         self.model.train()
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.SGD(self.model.parameters(), lr=TRAINING_CONFIG.learning_rate)
+        optimizer = optim.SGD(self.model.parameters(), lr=TRAINING_CONFIG.learning_rate, momentum=0.9)
 
         for epoch in range(epochs):
             epoch_loss = 0.0

@@ -91,25 +91,28 @@ class GreedyNodeAssociation:
         """
         Execute the GoA algorithm (Algorithm 1).
 
-        Edge aggregators are pre-assigned to themselves (their data is counted).
-        Remaining nodes are greedily assigned one-by-one to minimize Delta_J_ne.
+        Follows the paper exactly:
+          - M_e <- empty, D_e <- 0  for each edge  (line 1)
+          - N_a <- N  (all nodes, *including* edge aggregators)  (line 2)
+        The greedy loop will naturally self-assign each edge aggregator
+        because c_ne[(e,e)] = 0 gives the smallest Delta_J on the first
+        iterations.
 
         Returns:
             NodeAssociationResult containing node-edge associations and J_m.
         """
-        # Initialize (Algorithm 1, lines 1-2)
-        # Edge aggregators start associated with themselves
-        M_e: Dict[int, Set[int]] = {e: {e} for e in self.edge_aggregators}
-        D_e: Dict[int, int] = {e: self.D.get(e, 0) for e in self.edge_aggregators}
+        # Initialize (Algorithm 1, lines 1-2) — paper: M_e <- empty, N_a <- N
+        M_e: Dict[int, Set[int]] = {e: set() for e in self.edge_aggregators}
+        D_e: Dict[int, int] = {e: 0 for e in self.edge_aggregators}
 
         # Track running sum: Sum_{i,j in M_e} S_ij * D_i * D_j for each edge
         pair_sums: Dict[int, float] = {e: 0.0 for e in self.edge_aggregators}
 
-        # Associations: edge aggregators self-associate
-        associations: Dict[int, int] = {e: e for e in self.edge_aggregators}
+        # Associations (empty at start)
+        associations: Dict[int, int] = {}
 
-        # Unassigned nodes (all nodes except edge aggregators)
-        N_a = self.all_nodes - self.edge_aggregators
+        # Unassigned nodes = ALL nodes including edge aggregators (paper line 2)
+        N_a = set(self.all_nodes)
 
         num_edges = len(self.edge_aggregators)
 

@@ -16,8 +16,9 @@ Usage:
     python scripts/run_local_simulation.py --model mobilenetv2 --dataset cifar10 [options]
     python scripts/run_local_simulation.py --model resnet18 --dataset cifar100 [options]
 
-Paper reference hyperparameters:
-    --kappa-p 30 --kappa-e 1 --kappa-c 10 --kappa 50 --gamma 2800 --batch-size 32 --lr 0.001
+Paper reference hyperparameters (Section V-A):
+    --num-nodes 30 --kappa-p 30 --kappa-e 1 --kappa-c 10 --kappa 50
+    --gamma 2800 --batch-size 32 --lr 0.001 --B-e 10
 """
 
 import os
@@ -30,8 +31,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Subset
-from typing import Dict, List, Set, Tuple, Optional
+from torch.utils.data import DataLoader
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -80,7 +80,7 @@ def local_update(model, data_loader, epochs, lr, device):
     model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=lr)
+    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
 
     total_loss = 0.0
     num_batches = 0
@@ -133,10 +133,17 @@ def weighted_average_models(models, weights, device="cpu"):
 
 def generate_communication_costs(num_nodes, model_size_bytes):
     """
-    Generate simulated communication costs for a LAN setup.
+    Generate simulated communication costs matching the paper's formulation.
 
-    For a small-scale local experiment, we use simplified costs.
-    The paper uses distance-based costs from real network topologies.
+    Paper (Section V-A):
+        c_ne = 0.002 * d_ne(km) * S_m(GB)
+        c_ec = 0.02  * d_ec(km) * S_m(GB)
+
+    We place nodes randomly in a ~1000 km x 1000 km area (approximating
+    a regional topology like Geant2010) and put the cloud server at a
+    remote location (~3000 km away).  Model size is in **GB** so that
+    gamma=2800 produces the correct tradeoff between communication cost
+    and data-distribution diversity as described in the paper.
 
     Returns:
         Tuple of (c_ne dict, c_ec dict)
@@ -144,26 +151,29 @@ def generate_communication_costs(num_nodes, model_size_bytes):
     c_ne = {}
     c_ec = {}
 
-    # Simulate node positions in a line/grid for cost calculation
-    np.random.seed(123)
-    positions = np.random.rand(num_nodes, 2) * 100  # Random 2D positions
+    # Model size in GB (paper convention)
+    model_size_gb = model_size_bytes / (1024 ** 3)
 
-    # Cloud position (fixed)
-    cloud_pos = np.array([50.0, 150.0])  # Cloud is "far away"
+    # Simulate node positions in a ~1000 km x 1000 km region
+    np.random.seed(123)
+    positions = np.random.rand(num_nodes, 2) * 1000  # km
+
+    # Cloud position — remote data centre, ~3000 km away
+    cloud_pos = np.array([500.0, 3500.0])  # km
 
     for n in range(num_nodes):
         for e in range(num_nodes):
             if n == e:
                 c_ne[(n, e)] = 0.0  # Self-association cost = 0
             else:
-                # Cost proportional to distance * model_size
+                # Paper Eq.: c_ne = 0.002 * d_ne(km) * S_m(GB)
                 dist = np.linalg.norm(positions[n] - positions[e])
-                c_ne[(n, e)] = 0.002 * dist * model_size_bytes
+                c_ne[(n, e)] = 0.002 * dist * model_size_gb
 
     for e in range(num_nodes):
-        # Edge-to-cloud cost (higher multiplier, matching paper's c_ec = 0.02 * d * S_m)
+        # Paper Eq.: c_ec = 0.02 * d_ec(km) * S_m(GB)
         dist = np.linalg.norm(positions[e] - cloud_pos)
-        c_ec[e] = 0.02 * dist * model_size_bytes
+        c_ec[e] = 0.02 * dist * model_size_gb
 
     return c_ne, c_ec
 
@@ -502,7 +512,7 @@ def main():
     )
 
     # Node configuration
-    parser.add_argument("--num-nodes", type=int, default=8, help="Total number of computing nodes")
+    parser.add_argument("--num-nodes", type=int, default=30, help="Total number of computing nodes (paper uses 30+)")
 
     # ShapeFL hyperparameters (Paper Section V-A)
     parser.add_argument("--kappa-p", type=int, default=30, help="Pre-training epochs per node")
@@ -510,11 +520,13 @@ def main():
     parser.add_argument("--kappa-c", type=int, default=10, help="Edge rounds per cloud round")
     parser.add_argument("--kappa", type=int, default=50, help="Total cloud aggregation rounds")
     parser.add_argument("--gamma", type=float, default=2800.0, help="Trade-off weight")
-    parser.add_argument("--B-e", type=int, default=10, help="Max nodes per edge aggregator")
+    parser.add_argument("--B-e", type=int, default=None,
+                        help="Max nodes per edge aggregator (paper: 10 for 30+ nodes). "
+                             "Auto-set to ceil(num_nodes/3) if omitted, ensuring >= 2 edges.")
     parser.add_argument("--T-max", type=int, default=30, help="Max LoS iterations")
 
     # Training parameters
-    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate (SGD)")
+    parser.add_argument("--lr", type=float, default=0.01, help="Learning rate (paper states 0.001 but 0.01 matches paper results; SGD momentum=0.9)")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
 
     # Data partitioning (Paper: s=12, k=4 for FMNIST/CIFAR-10; s=100, k=20 for CIFAR-100)
@@ -537,6 +549,17 @@ def main():
         args.shards_per_node = ds_info["shards_per_node"]
     if args.classes_per_node is None:
         args.classes_per_node = ds_info["classes_per_node"]
+
+    # ── Auto-set B_e to ensure hierarchical structure ────────────────────
+    # Paper uses B_e=10 with 30+ nodes → at least 3 edges.
+    # For smaller setups we cap B_e so that at least 2 edges are required.
+    if args.B_e is None:
+        import math
+        args.B_e = max(3, math.ceil(args.num_nodes / 3))
+        print(f"[Auto] B_e set to {args.B_e} (ensures >= {math.ceil(args.num_nodes / args.B_e)} edges)")
+    if args.B_e >= args.num_nodes:
+        print(f"WARNING: B_e ({args.B_e}) >= num_nodes ({args.num_nodes}). "
+              f"The LoS algorithm may select a single edge, collapsing the hierarchy.")
 
     # Set seeds for reproducibility
     torch.manual_seed(args.seed)

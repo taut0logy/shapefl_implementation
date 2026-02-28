@@ -7,6 +7,7 @@ logs/
 partitions/
 checkpoints/
 metrics/
+results/
 *.md
 !README.md
 !LICENSE.md

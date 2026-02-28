@@ -4,7 +4,14 @@ Local Search Edge Selection (LoS) Algorithm
 Implementation of Algorithm 2 from the ShapeFL paper.
 
 Purpose: Select which nodes should become edge aggregators from the
-         candidate set N_c to minimize the overall objective function J.
+         candidate set N_e to minimize the overall objective function J.
+
+Objective (Eq. 19):
+    J(E_s) = J_m(E_s) + Sum_{e in E_s} c_ec
+
+Where J_m is the optimal value from the GoA node association (Eq. 14), which
+includes BOTH communication cost (kappa_c * Sum c_ne) AND data distribution
+diversity (-gamma * J_d).
 
 The algorithm uses three local search operations:
 - open(e): Add edge aggregator e to the current solution
@@ -43,14 +50,13 @@ class LocalSearchEdgeSelection:
 
     def __init__(
         self,
-        candidate_edges: List[int],  # N_c: candidate edge aggregator nodes
+        candidate_edges: List[int],  # N_e: candidate edge aggregator nodes
         all_nodes: List[int],  # N: all computing nodes
         communication_costs_ne: Dict[Tuple[int, int], float],  # c_ne: node to edge cost
         communication_costs_ec: Dict[int, float],  # c_ec: edge to cloud cost
-        similarity_matrix: np.ndarray,  # S_ij: data distribution similarity
+        similarity_matrix: np.ndarray,  # S_ij: data distribution diversity
         data_sizes: Dict[int, int],  # D_n: data size of each node
-        kappa_e: int = 2,  # Edge epochs
-        kappa_c: int = 10,  # Cloud epochs (communication rounds)
+        kappa_c: int = 10,  # Edge aggregation epochs per cloud round
         gamma: float = 2800.0,  # Trade-off weight
         B_e: int = 10,  # Max nodes per edge
         T_max: int = 30,  # Max iterations
@@ -65,8 +71,7 @@ class LocalSearchEdgeSelection:
             communication_costs_ec: Cost from edge e to cloud server
             similarity_matrix: N x N similarity matrix
             data_sizes: Data size per node
-            kappa_e: Edge epochs before cloud aggregation
-            kappa_c: Number of cloud aggregation rounds
+            kappa_c: Edge aggregation epochs per cloud round
             gamma: Trade-off weight
             B_e: Max nodes per edge aggregator
             T_max: Maximum iterations for local search
@@ -77,7 +82,6 @@ class LocalSearchEdgeSelection:
         self.c_ec = communication_costs_ec
         self.S = similarity_matrix
         self.D = data_sizes
-        self.kappa_e = kappa_e
         self.kappa_c = kappa_c
         self.gamma = gamma
         self.B_e = B_e
@@ -87,12 +91,16 @@ class LocalSearchEdgeSelection:
         self, edge_set: Set[int]
     ) -> Tuple[float, Optional[NodeAssociationResult]]:
         """
-        Compute the objective function J(ε_s) for a given edge aggregator set.
+        Compute the objective function J(E_s) for a given edge aggregator set.
 
         From Equation (19) in the paper:
-        J(ε_s) = J_m(ε_s) + Σ_{e ∈ ε_s} c_ec
+        J(E_s) = J_m(E_s) + Sum_{e in E_s} c_ec
 
-        Where J_m is the optimal value from the node association problem.
+        J_m is the optimal value of Eq. (14), returned by GoA, which already
+        includes both the communication cost and the -gamma * diversity term.
+
+        Note: c_ec is NOT multiplied by kappa_c. It's a per-cloud-round cost
+        (edges submit to cloud once per cloud round).
 
         Args:
             edge_set: Set of edge aggregator IDs
@@ -103,32 +111,35 @@ class LocalSearchEdgeSelection:
         if len(edge_set) == 0:
             return float("inf"), None
 
+        # Check feasibility: can all nodes be assigned?
+        total_capacity = len(edge_set) * self.B_e
+        if total_capacity < len(self.N):
+            return float("inf"), None
+
         # Run GoA to get optimal node associations for this edge set
         goa = GreedyNodeAssociation(
             edge_aggregators=list(edge_set),
             communication_costs=self.c_ne,
             similarity_matrix=self.S,
             data_sizes=self.D,
-            kappa_e=self.kappa_e,
+            kappa_c=self.kappa_c,
             gamma=self.gamma,
             B_e=self.B_e,
         )
         association_result = goa.run()
 
-        # Compute J_m: total cost from node associations
-        # This is the sum of all ΔJ_ne for associated pairs
-        J_m = 0.0
-        for node, edge in association_result.associations.items():
-            if node not in edge_set:  # Don't count edge aggregators themselves
-                # Communication cost component
-                comm_cost = self.kappa_e * self.c_ne.get((node, edge), 0)
-                J_m += comm_cost
+        # Check if all nodes were assigned
+        if len(association_result.associations) < len(self.N):
+            return float("inf"), association_result
 
-        # Add edge-to-cloud communication costs
+        # J_m from GoA (Eq. 14): includes comm cost AND diversity term
+        J_m = association_result.objective_value
+
+        # Edge-to-cloud communication cost: Sum c_ec (Eq. 19, no kappa_c multiplier)
         edge_cloud_cost = sum(self.c_ec.get(e, 0) for e in edge_set)
 
         # Total objective
-        J = J_m + self.kappa_c * edge_cloud_cost
+        J = J_m + edge_cloud_cost
 
         return J, association_result
 
@@ -165,12 +176,11 @@ class LocalSearchEdgeSelection:
 
         print(f"Initial: {len(E_s)} edges, J = {J_current:.2f}")
 
-        # Main loop (Algorithm 2, lines 2-22)
+        # Main loop (Algorithm 2, lines 2-19)
         for t in range(self.T_max):
             improved = False
 
-            # 'open' operation (Algorithm 2, lines 3-8)
-            # Try adding an edge aggregator not in current solution
+            # 'open' operation (Algorithm 2, lines 3-7)
             E_not_selected = self.N_c - E_s
             for e in E_not_selected:
                 E_new = E_s | {e}
@@ -187,8 +197,7 @@ class LocalSearchEdgeSelection:
             if improved:
                 continue
 
-            # 'close' operation (Algorithm 2, lines 10-14)
-            # Try removing an edge aggregator from current solution
+            # 'close' operation (Algorithm 2, lines 8-12)
             if len(E_s) > 1:  # Keep at least one edge
                 for e in list(E_s):
                     E_new = E_s - {e}
@@ -205,8 +214,7 @@ class LocalSearchEdgeSelection:
             if improved:
                 continue
 
-            # 'swap' operation (Algorithm 2, lines 15-20)
-            # Try swapping an edge aggregator with a non-selected one
+            # 'swap' operation (Algorithm 2, lines 13-18)
             E_not_selected = self.N_c - E_s
             for e_new in E_not_selected:
                 for e_old in list(E_s):
@@ -241,7 +249,6 @@ def run_los(
     communication_costs_ec: Dict[int, float],
     similarity_matrix: np.ndarray,
     data_sizes: Dict[int, int],
-    kappa_e: int = 2,
     kappa_c: int = 10,
     gamma: float = 2800.0,
     B_e: int = 10,
@@ -258,8 +265,7 @@ def run_los(
         communication_costs_ec: Edge-to-cloud communication costs
         similarity_matrix: N x N similarity matrix
         data_sizes: Data size per node
-        kappa_e: Edge epochs
-        kappa_c: Cloud epochs
+        kappa_c: Edge aggregation epochs per cloud round
         gamma: Trade-off weight
         B_e: Max nodes per edge
         T_max: Max iterations
@@ -275,7 +281,6 @@ def run_los(
         communication_costs_ec=communication_costs_ec,
         similarity_matrix=similarity_matrix,
         data_sizes=data_sizes,
-        kappa_e=kappa_e,
         kappa_c=kappa_c,
         gamma=gamma,
         B_e=B_e,
@@ -289,11 +294,11 @@ if __name__ == "__main__":
     print("Testing LoS Algorithm")
     print("=" * 50)
 
-    # Sample configuration: 8 nodes, 3 can be edge aggregators
+    # Sample: 8 nodes, all candidates for edge
     num_nodes = 8
-    candidate_edges = [0, 3, 6]  # Nodes 0, 3, 6 can be edge aggregators
+    candidate_edges = list(range(num_nodes))
 
-    # Random similarity matrix
+    # Random diversity matrix
     np.random.seed(42)
     S = np.random.rand(num_nodes, num_nodes)
     S = (S + S.T) / 2
@@ -303,9 +308,12 @@ if __name__ == "__main__":
     c_ne = {}
     for n in range(num_nodes):
         for e in candidate_edges:
-            c_ne[(n, e)] = abs(n - e) * 50 + np.random.rand() * 20
+            if n == e:
+                c_ne[(n, e)] = 0.0
+            else:
+                c_ne[(n, e)] = abs(n - e) * 50 + np.random.rand() * 20
 
-    c_ec = {e: e * 100 + 50 for e in candidate_edges}  # Edge to cloud cost
+    c_ec = {e: (e + 1) * 100 for e in candidate_edges}
 
     # Data sizes
     data_sizes = {i: 180 for i in range(num_nodes)}
@@ -318,7 +326,6 @@ if __name__ == "__main__":
         communication_costs_ec=c_ec,
         similarity_matrix=S,
         data_sizes=data_sizes,
-        kappa_e=2,
         kappa_c=10,
         gamma=2800.0,
         B_e=10,

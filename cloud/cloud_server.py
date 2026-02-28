@@ -361,7 +361,6 @@ class CloudServer:
             communication_costs_ec=c_ec,
             similarity_matrix=self.similarity_matrix,
             data_sizes=data_sizes_idx,
-            kappa_e=TRAINING_CONFIG.kappa_e,
             kappa_c=TRAINING_CONFIG.kappa_c,
             gamma=TRAINING_CONFIG.gamma,
             B_e=TRAINING_CONFIG.B_e,

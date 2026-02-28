@@ -326,16 +326,18 @@ class EdgeAggregator:
         """
         Run the edge aggregation training loop.
 
+        Per Algorithm 3 from the paper:
         For each cloud aggregation round:
-            For each edge epoch (1 to kappa_e):
+            For each edge epoch (1 to kappa_c):
                 1. Broadcast model to nodes
-                2. Wait for node updates
-                3. Aggregate node updates
+                2. Nodes train locally for kappa_e epochs
+                3. Collect node updates
+                4. Aggregate node updates (FedAvg)
             Submit aggregated model to cloud
         """
         print(f"\nStarting training loop for edge {self.edge_id}")
 
-        kappa_e = TRAINING_CONFIG.kappa_e
+        kappa_c = TRAINING_CONFIG.kappa_c  # Edge epochs per cloud round
 
         for round_num in range(1, TRAINING_CONFIG.kappa + 1):
             self.current_round = round_num
@@ -346,10 +348,10 @@ class EdgeAggregator:
             # Fetch latest global model from cloud
             self.fetch_global_model()
 
-            # Run kappa_e edge epochs
-            for edge_epoch in range(1, kappa_e + 1):
+            # Run kappa_c edge aggregation epochs (Algorithm 3, line 16)
+            for edge_epoch in range(1, kappa_c + 1):
                 self.current_edge_epoch = edge_epoch
-                print(f"\n  Edge epoch {edge_epoch}/{kappa_e}")
+                print(f"\n  Edge epoch {edge_epoch}/{kappa_c}")
 
                 # Broadcast to nodes
                 self.broadcast_to_nodes()
@@ -367,9 +369,8 @@ class EdgeAggregator:
                 # Aggregate node updates
                 self.aggregate_node_updates()
 
-            # Submit to cloud after completing kappa_e edge epochs
-            # Per Algorithm 3: Edge submits after each round of local aggregations
-            # The cloud decides when to perform global aggregation based on kappa_c
+            # Submit to cloud after completing kappa_c edge epochs
+            # Per Algorithm 3: Edge submits after kappa_c edge aggregations
             print(f"\nSubmitting to cloud after round {round_num}")
             self.submit_to_cloud()
 

@@ -6,14 +6,14 @@ Implementation of Algorithm 1 from the ShapeFL paper.
 Purpose: Given a set of edge aggregators, determine which edge aggregator
          each distributed node should associate with.
 
-Objective: Minimize the combined cost function:
-    ΔJ_ne = κ_e * c_ne - γ * (1/|ε|) * ΔS_ne
+Objective (Eq. 14):
+    min_Y  kappa_c * Sum y_ne * c_ne  -  gamma/|E| * Sum_{e in E} [1/C(D_e,2)] * Sum_{i,j in M_e} S_ij * D_i * D_j
 
-Where:
-- κ_e: number of edge epochs per cloud aggregation
-- c_ne: communication cost between node n and edge aggregator e
-- γ: trade-off weight between communication cost and data distribution
-- ΔS_ne: average reduction of data distribution diversity when associating n with e
+Per-step greedy criterion (Algorithm 1, line 9):
+    Delta_J_ne = kappa_c * c_ne  -  gamma * (1/|E|) * Delta_S_ne
+
+Where Delta_S_ne (line 8) is the CHANGE in the diversity measure when adding node n to edge e:
+    Delta_S_ne = [Sum_{i,j in M'_e} S_ij*D_i*D_j / C(D'_e,2)] - [Sum_{i,j in M_e} S_ij*D_i*D_j / C(D_e,2)]
 
 Reference: Paper Section IV-C, Algorithm 1 (page 2606)
 """
@@ -33,6 +33,10 @@ class NodeAssociationResult:
     edge_nodes: Dict[int, Set[int]]
     # Total data size at each edge aggregator
     edge_data_sizes: Dict[int, int]
+    # Objective value J_m from Eq. (14)
+    objective_value: float
+    # Running diversity sums per edge: Sum_{i,j in M_e} S_ij * D_i * D_j
+    edge_diversity_sums: Dict[int, float]
 
 
 class GreedyNodeAssociation:
@@ -45,13 +49,13 @@ class GreedyNodeAssociation:
 
     def __init__(
         self,
-        edge_aggregators: List[int],  # Set ε of selected edge aggregators
+        edge_aggregators: List[int],  # Set E of selected edge aggregators
         communication_costs: Dict[
             Tuple[int, int], float
         ],  # c_ne for each (node, edge) pair
-        similarity_matrix: np.ndarray,  # S_ij: data distribution similarity
+        similarity_matrix: np.ndarray,  # S_ij: data distribution diversity
         data_sizes: Dict[int, int],  # D_n: data size of each node
-        kappa_e: int = 2,  # Edge epochs per cloud aggregation
+        kappa_c: int = 10,  # kappa_c: edge epochs per cloud round (Algorithm 1 line 9)
         gamma: float = 2800.0,  # Trade-off weight
         B_e: int = 10,  # Max nodes per edge aggregator
     ):
@@ -61,9 +65,9 @@ class GreedyNodeAssociation:
         Args:
             edge_aggregators: List of node IDs selected as edge aggregators
             communication_costs: Dictionary mapping (node_id, edge_id) to cost
-            similarity_matrix: N x N matrix where S[i,j] is similarity between nodes i and j
+            similarity_matrix: N x N matrix where S[i,j] is diversity between nodes i and j
             data_sizes: Dictionary mapping node_id to data size
-            kappa_e: Number of local epochs before edge aggregation
+            kappa_c: Number of edge aggregation epochs per cloud round
             gamma: Trade-off weight between communication cost and diversity
             B_e: Maximum number of nodes that can associate with each edge aggregator
         """
@@ -71,111 +75,91 @@ class GreedyNodeAssociation:
         self.c_ne = communication_costs
         self.S = similarity_matrix
         self.D = data_sizes
-        self.kappa_e = kappa_e
+        self.kappa_c = kappa_c
         self.gamma = gamma
         self.B_e = B_e
 
         # All nodes (including those that are edge aggregators)
         self.all_nodes = set(data_sizes.keys())
 
-        # Nodes that need to be associated (excluding edge aggregators themselves)
-        # In the paper, edge aggregators can also be computing nodes
-        self.nodes_to_assign = self.all_nodes - self.edge_aggregators
-
-    def compute_delta_J(
-        self,
-        node: int,
-        edge: int,
-        current_edge_nodes: Set[int],
-        current_edge_data_size: int,
-    ) -> float:
-        """
-        Compute ΔJ_ne: the cost-benefit of associating node n with edge e.
-
-        From Algorithm 1, line 9:
-        ΔJ_ne = κ_e * c_ne - γ * (1/|ε|) * ΔS_ne
-
-        Where ΔS_ne is the change in diversity measure.
-
-        Args:
-            node: Node ID to potentially associate
-            edge: Edge aggregator ID
-            current_edge_nodes: Set of nodes currently associated with edge
-            current_edge_data_size: Total data size currently at edge
-
-        Returns:
-            ΔJ_ne value (lower is better)
-        """
-        # Communication cost term
-        comm_cost = self.kappa_e * self.c_ne.get((node, edge), float("inf"))
-
-        # Compute diversity term ΔS_ne
-        # This is the average similarity between node n and existing nodes at edge e
-        if len(current_edge_nodes) == 0:
-            delta_S = 0.0
-        else:
-            # Sum of S_ij * D_i * D_j for all pairs involving node n
-            D_n = self.D[node]
-            total_similarity = 0.0
-            for other_node in current_edge_nodes:
-                D_other = self.D[other_node]
-                S_ij = self.S[node, other_node]
-                total_similarity += S_ij * D_n * D_other
-
-            # Normalize by the combinatorial factor
-            new_data_size = current_edge_data_size + D_n
-            # Paper uses D_e choose 2 for normalization
-            if new_data_size > 1:
-                delta_S = total_similarity / (new_data_size * (new_data_size - 1) / 2)
-            else:
-                delta_S = 0.0
-
-        # Trade-off between communication cost and diversity
-        num_edges = len(self.edge_aggregators)
-        delta_J = comm_cost - self.gamma * (1.0 / num_edges) * delta_S
-
-        return delta_J
+    @staticmethod
+    def _comb2(d: float) -> float:
+        """Compute C(d, 2) = d*(d-1)/2. Used for normalization in Eq. (12)."""
+        return d * (d - 1) / 2.0 if d > 1 else 0.0
 
     def run(self) -> NodeAssociationResult:
         """
         Execute the GoA algorithm (Algorithm 1).
 
+        Edge aggregators are pre-assigned to themselves (their data is counted).
+        Remaining nodes are greedily assigned one-by-one to minimize Delta_J_ne.
+
         Returns:
-            NodeAssociationResult containing the node-edge associations
+            NodeAssociationResult containing node-edge associations and J_m.
         """
         # Initialize (Algorithm 1, lines 1-2)
-        # M_e: set of nodes associated with edge e
-        M_e: Dict[int, Set[int]] = {e: set() for e in self.edge_aggregators}
-        # D_e: total data size at edge e
-        D_e: Dict[int, int] = {e: 0 for e in self.edge_aggregators}
-        # N_a: unassigned nodes
-        N_a = set(self.nodes_to_assign)
+        # Edge aggregators start associated with themselves
+        M_e: Dict[int, Set[int]] = {e: {e} for e in self.edge_aggregators}
+        D_e: Dict[int, int] = {e: self.D.get(e, 0) for e in self.edge_aggregators}
 
-        # Association results
-        associations: Dict[int, int] = {}
+        # Track running sum: Sum_{i,j in M_e} S_ij * D_i * D_j for each edge
+        pair_sums: Dict[int, float] = {e: 0.0 for e in self.edge_aggregators}
+
+        # Associations: edge aggregators self-associate
+        associations: Dict[int, int] = {e: e for e in self.edge_aggregators}
+
+        # Unassigned nodes (all nodes except edge aggregators)
+        N_a = self.all_nodes - self.edge_aggregators
+
+        num_edges = len(self.edge_aggregators)
 
         # Main loop (Algorithm 1, lines 3-15)
         while len(N_a) > 0:
             best_node = None
             best_edge = None
             best_delta_J = float("inf")
+            best_new_pairs_sum = 0.0
 
-            # For each unassigned node
+            # For each unassigned node (line 4)
             for n in N_a:
-                # For each edge aggregator with capacity
+                D_n = self.D[n]
+
+                # For each edge aggregator with capacity (line 5)
                 for e in self.edge_aggregators:
-                    # Check capacity constraint (line 5)
                     if len(M_e[e]) >= self.B_e:
                         continue
 
-                    # Compute ΔJ_ne
-                    delta_J = self.compute_delta_J(n, e, M_e[e], D_e[e])
+                    # --- Communication cost term: kappa_c * c_ne (line 9, first term) ---
+                    comm_cost = self.kappa_c * self.c_ne.get((n, e), float("inf"))
 
-                    # Track the best (minimum) ΔJ_ne
+                    # --- Compute Delta_S_ne (line 8) ---
+                    # New pairs involving node n with all existing nodes in M_e
+                    new_pairs_sum = 0.0
+                    for m in M_e[e]:
+                        new_pairs_sum += self.S[n, m] * D_n * self.D[m]
+
+                    # Old diversity term: pair_sums[e] / C(D_e, 2)
+                    old_comb = self._comb2(D_e[e])
+                    old_term = pair_sums[e] / old_comb if old_comb > 0 else 0.0
+
+                    # New diversity term: (pair_sums[e] + new_pairs) / C(D_e + D_n, 2)
+                    new_sum = pair_sums[e] + new_pairs_sum
+                    new_de = D_e[e] + D_n
+                    new_comb = self._comb2(new_de)
+                    new_term = new_sum / new_comb if new_comb > 0 else 0.0
+
+                    # Delta_S_ne = new diversity - old diversity
+                    delta_S = new_term - old_term
+
+                    # --- Delta_J_ne (line 9) ---
+                    delta_J = comm_cost - self.gamma * (1.0 / num_edges) * delta_S
+
+                    # Track the minimum Delta_J_ne (line 10)
                     if delta_J < best_delta_J:
                         best_delta_J = delta_J
                         best_node = n
                         best_edge = e
+                        best_new_pairs_sum = new_pairs_sum
 
             if best_node is None:
                 # No valid assignment found (all edges at capacity)
@@ -185,17 +169,35 @@ class GreedyNodeAssociation:
                 break
 
             # Associate the best node with the best edge (lines 11-14)
+            pair_sums[best_edge] += best_new_pairs_sum
             M_e[best_edge].add(best_node)
-            N_a.remove(best_node)
             D_e[best_edge] += self.D[best_node]
+            N_a.remove(best_node)
             associations[best_node] = best_edge
 
-        # Edge aggregators are associated with themselves
+        # --- Compute final objective J_m (Eq. 14) ---
+        # J_m = kappa_c * Sum c_ne  -  gamma/|E| * Sum diversity
+        comm_total = 0.0
+        for node, edge in associations.items():
+            if node not in self.edge_aggregators:
+                comm_total += self.kappa_c * self.c_ne.get((node, edge), 0)
+
+        diversity_total = 0.0
         for e in self.edge_aggregators:
-            associations[e] = e
+            comb = self._comb2(D_e[e])
+            if comb > 0:
+                diversity_total += pair_sums[e] / comb
+        if num_edges > 0:
+            diversity_total /= num_edges
+
+        J_m = comm_total - self.gamma * diversity_total
 
         return NodeAssociationResult(
-            associations=associations, edge_nodes=M_e, edge_data_sizes=D_e
+            associations=associations,
+            edge_nodes=M_e,
+            edge_data_sizes=D_e,
+            objective_value=J_m,
+            edge_diversity_sums=pair_sums,
         )
 
 
@@ -205,7 +207,7 @@ def run_goa(
     communication_costs: Dict[Tuple[int, int], float],
     similarity_matrix: np.ndarray,
     data_sizes: Dict[int, int],
-    kappa_e: int = 2,
+    kappa_c: int = 10,
     gamma: float = 2800.0,
     B_e: int = 10,
 ) -> NodeAssociationResult:
@@ -218,7 +220,7 @@ def run_goa(
         communication_costs: Dictionary mapping (node_id, edge_id) to cost
         similarity_matrix: N x N similarity matrix
         data_sizes: Dictionary mapping node_id to data size
-        kappa_e: Edge epochs before cloud aggregation
+        kappa_c: Edge epochs per cloud round
         gamma: Trade-off weight
         B_e: Max nodes per edge aggregator
 
@@ -230,7 +232,7 @@ def run_goa(
         communication_costs=communication_costs,
         similarity_matrix=similarity_matrix,
         data_sizes=data_sizes,
-        kappa_e=kappa_e,
+        kappa_c=kappa_c,
         gamma=gamma,
         B_e=B_e,
     )
@@ -244,23 +246,25 @@ if __name__ == "__main__":
 
     # Sample configuration: 5 nodes, 2 edge aggregators
     num_nodes = 5
-    edge_aggs = [0, 2]  # Nodes 0 and 2 are edge aggregators
+    edge_aggs = [0, 2]
 
-    # Random similarity matrix (symmetric)
+    # Random diversity matrix (symmetric)
     np.random.seed(42)
     S = np.random.rand(num_nodes, num_nodes)
-    S = (S + S.T) / 2  # Make symmetric
-    np.fill_diagonal(S, 0)  # Zero diagonal (node is not similar to itself)
+    S = (S + S.T) / 2
+    np.fill_diagonal(S, 0)
 
-    # Communication costs (simplified: based on "distance")
+    # Communication costs: c_ne[(n, e)], zero for self-association
     comm_costs = {}
     for n in range(num_nodes):
         for e in edge_aggs:
-            # Simulated cost based on node distance
-            comm_costs[(n, e)] = abs(n - e) * 100  # Simple linear cost
+            if n == e:
+                comm_costs[(n, e)] = 0.0
+            else:
+                comm_costs[(n, e)] = abs(n - e) * 100
 
-    # Data sizes
-    data_sizes = {i: 180 for i in range(num_nodes)}  # 180 samples per node
+    # Data sizes (180 samples per node)
+    data_sizes = {i: 180 for i in range(num_nodes)}
 
     # Run GoA
     result = run_goa(
@@ -269,7 +273,7 @@ if __name__ == "__main__":
         communication_costs=comm_costs,
         similarity_matrix=S,
         data_sizes=data_sizes,
-        kappa_e=2,
+        kappa_c=10,
         gamma=2800.0,
         B_e=10,
     )
@@ -278,3 +282,4 @@ if __name__ == "__main__":
     print(f"Associations: {result.associations}")
     print(f"Edge nodes: {result.edge_nodes}")
     print(f"Edge data sizes: {result.edge_data_sizes}")
+    print(f"Objective J_m: {result.objective_value:.2f}")

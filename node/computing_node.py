@@ -455,23 +455,23 @@ class ComputingNode:
         """
         Run the node training loop.
 
-        For each round:
-            Wait for model from edge
-            Perform local training
-            Submit update to edge
+        Per Algorithm 3 (LocalUpdate):
+        For each edge epoch, the node:
+            1. Receives model from edge aggregator
+            2. Trains locally for kappa_e epochs
+            3. Submits trained model back to edge
         """
         print(f"\nStarting training loop for node {self.node_id}")
 
-        for round_num in range(1, TRAINING_CONFIG.kappa + 1):
-            print(f"\n--- Round {round_num} ---")
+        total_edge_epochs = TRAINING_CONFIG.kappa * TRAINING_CONFIG.kappa_c
 
+        for epoch_num in range(1, total_edge_epochs + 1):
             # Wait for model from edge
             self.model_received.clear()
-            print("Waiting for model from edge...")
             self.model_received.wait(timeout=300)
 
-            # Perform local training
-            self.train_local(epochs=1)  # One epoch per edge communication
+            # Perform local training for kappa_e epochs (Algorithm 3, line 30)
+            self.train_local(epochs=TRAINING_CONFIG.kappa_e)
 
         print(f"\nTraining complete for node {self.node_id}")
         self.training_complete.set()
